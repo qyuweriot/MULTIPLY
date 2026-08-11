@@ -1,0 +1,30 @@
+.app {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.app h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  letter-spacing: 0.1em;
+}
+
+.app .subtitle {
+  margin: 0 0 2rem;
+  opacity: 0.7;
+}
+
+.zone-preview {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.zone-preview div {
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  opacity: 0.6;
+}
