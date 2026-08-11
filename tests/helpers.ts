@@ -1,5 +1,7 @@
 // テスト用の盤面組み立てヘルパ。vite.config.ts の include は tests/**/*.test.ts なので
 // このファイル自体はテストとして実行されない。
+import { playTurn } from '../src/core/apply.ts'
+import { nextInt, seedFrom } from '../src/core/rng.ts'
 import { createGame } from '../src/core/setup.ts'
 import { onEnter } from '../src/core/zone.ts'
 import type { CardId, CardInstance, GameState, ZoneKey, ZoneState } from '../src/core/types.ts'
@@ -38,4 +40,35 @@ export function makeState(spec: Partial<Record<ZoneKey, CardId[]>>): GameState {
 /** ゾーンの index 番目に置かれたカードの uid */
 export function uidOfNth(state: GameState, key: ZoneKey, index: number): number {
   return state.zones[key].cards[index].uid
+}
+
+/**
+ * ランダム同士で決着まで打ち切る。
+ * 手の選択に使う乱数は state.rng とは別系統にして、ゲーム内イベント（平原のシャッフル等）の
+ * 乱数列を手の選択で汚さないようにしている。
+ */
+export function playoutRandom(state: GameState, seed: number): GameState {
+  let s = state
+  let pick = seedFrom(seed)
+  let guard = 0
+  while (s.phase === 'playing') {
+    if (guard++ > 100) throw new Error('14ターンで終わらなかった')
+    s = playTurn(s, (_, moves) => {
+      const [i, next] = nextInt(pick, moves.length)
+      pick = next
+      return moves[i]
+    })
+  }
+  return s
+}
+
+/** 手札・山札・捨て札・全ゾーンに散らばっているカードの uid をすべて集める */
+export function allCardUids(state: GameState): number[] {
+  return [
+    ...state.hands[0],
+    ...state.hands[1],
+    ...state.deck,
+    ...state.discard,
+    ...ALL_ZONES.flatMap((z) => state.zones[z].cards),
+  ].map((c) => c.uid)
 }

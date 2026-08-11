@@ -2,6 +2,8 @@
 // docs/カード効果テキスト.md の氷山【裁定】から起こしたもの。
 import { describe, expect, it } from 'vitest'
 import { canAccept, isFull, onEnter, onLeave } from '../src/core/zone.ts'
+import { legalMoves } from '../src/core/moves.ts'
+import type { GameState } from '../src/core/types.ts'
 import { ALL_ZONES } from '../src/core/types.ts'
 import { emptyZone, makeCard, makeState, zoneWith } from './helpers.ts'
 
@@ -75,6 +77,25 @@ describe('§9 ゾーンロック', () => {
     expect(locked.length).toBeLessThanOrEqual(3) // 氷山は3枚しかない
     expect(isFull(state.zones.p1z1)).toBe(false)
     expect(canAccept(state.zones.p1z1)).toBe(true)
+  })
+})
+
+describe('§9 ゾーンロック（合法手との連動）', () => {
+  it('#7 渦潮の移動先に満杯ゾーンは選べない', () => {
+    const state = makeState({
+      p0z0: ['heigen'], // 渦潮を置くゾーン。移動対象が1枚ある
+      p0z1: ['hyozan', 'hanmo'], // 満杯
+      p1z0: ['dangai'], // 空きあり
+      p1z1: [], // 空きあり
+    })
+    expect(isFull(state.zones.p0z1)).toBe(true)
+
+    const s: GameState = { ...state, hands: [[makeCard('uzushio')], state.hands[1]] }
+    const dests = legalMoves(s, 'p0z0').map((m) => m.moveTo)
+
+    expect(dests).not.toContain('p0z1') // 満杯なので移動先に出てこない
+    expect(dests).not.toContain('p0z0') // 元ゾーンも選べない
+    expect([...new Set(dests)].sort()).toEqual(['p1z0', 'p1z1'])
   })
 })
 
