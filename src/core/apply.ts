@@ -1,14 +1,19 @@
-// 状態遷移。applyMove は非破壊で、つねに新しい GameState を返す（作業計画書 §1-1・§7）。
+// 状態遷移と設置時効果。applyMove は非破壊で、つねに新しい GameState を返す
+// （作業計画書 §1-1・§7）。
 import { legalMoves } from './moves.ts'
+import { shuffle } from './rng.ts'
 import { TOTAL_TURNS } from './setup.ts'
-import type { CardInstance, GameState, LogEntry, Move, ZoneKey } from './types.ts'
-import { opponentOf } from './types.ts'
-import { isFull, onEnter } from './zone.ts'
+import type { CardInstance, GameState, LogEntry, Move, PlayerId, ZoneKey } from './types.ts'
+import { ALL_ZONES, opponentOf } from './types.ts'
+import { isFull, onEnter, onLeave } from './zone.ts'
 
 export type Chooser = (state: GameState, moves: Move[]) => Move
 
-function withHand(state: GameState, hand: CardInstance[]): [CardInstance[], CardInstance[]] {
-  return state.current === 0 ? [hand, state.hands[1]] : [state.hands[0], hand]
+/** 平原が引く枚数（正典：固定2枚） */
+const HEIGEN_DRAW = 2
+
+function setHand(state: GameState, p: PlayerId, hand: CardInstance[]): [CardInstance[], CardInstance[]] {
+  return p === 0 ? [hand, state.hands[1]] : [state.hands[0], hand]
 }
 
 /**
@@ -26,7 +31,130 @@ export function beginTurn(state: GameState): GameState {
   return {
     ...state,
     deck: rest,
-    hands: withHand(state, [...state.hands[state.current], top]),
+    hands: setHand(state, state.current, [...state.hands[state.current], top]),
+  }
+}
+
+/** 渦潮の移動先候補（設置前の盤面を基準にする） */
+function uzushioDests(state: GameState, zone: ZoneKey): ZoneKey[] {
+  return ALL_ZONES.filter((z) => z !== zone && !isFull(state.zones[z]))
+}
+
+/**
+ * 対象指定の妥当性を設置前の盤面で検証する。legalMoves を呼び直しての照合はしない
+ * （Phase 6 の探索ホットパスで二重計算になるため）。同じ条件式をここに書く。
+ */
+function validateTargets(state: GameState, move: Move, card: CardInstance): void {
+  const others = state.zones[move.zone].cards
+
+  if (card.defId === 'shiso') {
+    if (others.length === 0) {
+      if (move.targetUid !== undefined) throw new Error('刺創：対象がいないのに対象が指定されている')
+      return
+    }
+    if (move.targetUid === undefined) throw new Error('刺創：対象を指定する必要がある')
+    if (!others.some((c) => c.uid === move.targetUid)) {
+      throw new Error(`刺創：uid=${move.targetUid} は ${move.zone} にない`)
+    }
+    return
+  }
+
+  if (card.defId === 'uzushio') {
+    const dests = uzushioDests(state, move.zone)
+    if (others.length === 0 || dests.length === 0) {
+      if (move.targetUid !== undefined || move.moveTo !== undefined) {
+        throw new Error('渦潮：不発のはずなのに対象または移動先が指定されている')
+      }
+      return
+    }
+    if (move.targetUid === undefined || move.moveTo === undefined) {
+      throw new Error('渦潮：対象と移動先の両方を指定する必要がある')
+    }
+    if (!others.some((c) => c.uid === move.targetUid)) {
+      throw new Error(`渦潮：uid=${move.targetUid} は ${move.zone} にない`)
+    }
+    if (!dests.includes(move.moveTo)) {
+      throw new Error(`渦潮：${move.moveTo} は移動先に選べない`)
+    }
+  }
+}
+
+/**
+ * §7 手順7：設置時効果の解決。
+ *
+ * 引数の state は「カードを手札から取り除き、ゾーンに設置し終えた直後」の中間状態で、
+ * current はまだ使用者のまま。氷山・陽炎・月光・双翼・断崖・足枷・洞穴は常在効果なので
+ * ここでは何もしない（zoneTotal が毎回計算する）。
+ */
+function resolveOnPlace(
+  state: GameState,
+  move: Move,
+  card: CardInstance,
+): { state: GameState; fizzled: boolean } {
+  const player = state.current
+
+  switch (card.defId) {
+    // 手札をすべて山札に戻してシャッフルし、その後2枚引く
+    case 'heigen': {
+      const [deck, rng] = shuffle([...state.deck, ...state.hands[player]], state.rng)
+      const drawn = deck.slice(0, Math.min(HEIGEN_DRAW, deck.length))
+      return {
+        state: {
+          ...state,
+          deck: deck.slice(drawn.length),
+          hands: setHand(state, player, drawn),
+          rng,
+        },
+        fizzled: false,
+      }
+    }
+
+    // 相手と手札をすべて交換する
+    case 'shippu':
+      return { state: { ...state, hands: [state.hands[1], state.hands[0]] }, fizzled: false }
+
+    // このゾーンにあるカードを1枚選び、別のゾーンへ移動させる
+    case 'uzushio': {
+      if (move.targetUid === undefined || move.moveTo === undefined) {
+        return { state, fizzled: true } // 対象なし／移動先なしで不発
+      }
+      const from = move.zone
+      const to = move.moveTo
+      const target = state.zones[from].cards.find((c) => c.uid === move.targetUid)
+      if (target === undefined) return { state, fizzled: true }
+
+      // onLeave → onEnter。氷山ならロックが移動元から移動先へ移る。
+      // 移動したカードの設置時効果は再発動しない（§14-7）。
+      const left = onLeave(state.zones[from], target)
+      return {
+        state: {
+          ...state,
+          zones: { ...state.zones, [from]: left, [to]: onEnter(state.zones[to], target) },
+        },
+        fizzled: false,
+      }
+    }
+
+    // このゾーンにあるカードを1枚選び、捨て札にする
+    case 'shiso': {
+      if (move.targetUid === undefined) return { state, fizzled: true }
+      const target = state.zones[move.zone].cards.find((c) => c.uid === move.targetUid)
+      if (target === undefined) return { state, fizzled: true }
+
+      return {
+        state: {
+          ...state,
+          zones: { ...state.zones, [move.zone]: onLeave(state.zones[move.zone], target) },
+          // 捨て札はゲームから除外され、山札には戻らない
+          discard: [...state.discard, target],
+        },
+        fizzled: false,
+      }
+    }
+
+    // 繁茂の forcedZone は applyMove の後段でまとめて決める
+    default:
+      return { state, fizzled: false }
   }
 }
 
@@ -48,12 +176,11 @@ export function applyMove(state: GameState, move: Move): GameState {
   // 繁茂の強制が実際に効いているか（強制先が満杯なら不発＝自由に置ける）
   const forceApplies = state.forcedZone !== null && !isFull(state.zones[state.forcedZone])
 
-  let zones = state.zones
-  let discard = state.discard
-
+  // ── 設置 ──────────────────────────────────────────────────────────
+  let placed: GameState
   if (move.discardOnly) {
     // 安全弁：設置せず手札を1枚捨ててターンを終える
-    discard = [...discard, card]
+    placed = { ...state, hands: setHand(state, player, nextHand), discard: [...state.discard, card] }
   } else {
     if (isFull(state.zones[move.zone])) {
       throw new Error(`${move.zone} は満杯なので設置できない`)
@@ -61,18 +188,23 @@ export function applyMove(state: GameState, move: Move): GameState {
     if (forceApplies && move.zone !== state.forcedZone) {
       throw new Error(`繁茂により ${state.forcedZone} に置かなければならない`)
     }
-    zones = { ...zones, [move.zone]: onEnter(zones[move.zone], card) }
+    validateTargets(state, move, card)
+
+    placed = {
+      ...state,
+      hands: setHand(state, player, nextHand),
+      zones: { ...state.zones, [move.zone]: onEnter(state.zones[move.zone], card) },
+    }
   }
 
-  // ── 設置時効果（Phase 4 でここを埋める）──────────────────────────────
-  // 平原・繁茂・渦潮・疾風・刺創の解決はこの1箇所に集約する。
-  // 渦潮で移動したカードの設置時効果は再発動しない（§14-7）。
-  // 現時点では move.targetUid / move.moveTo はログに残すだけで効果を持たない。
+  // ── 設置時効果 ────────────────────────────────────────────────────
+  const { state: resolved, fizzled } = move.discardOnly
+    ? { state: placed, fizzled: false }
+    : resolveOnPlace(placed, move, card)
 
   // 次ターンの制約は「今置いたカード」だけから決める。古い値は決して引き継がないので、
   // 「繁茂を置いたターンに自分の制約を自分で消す」バグ（§14-1）は構造的に起こり得ない。
-  // Phase 4 でここが「置いたカードが繁茂なら設置先ゾーン」に変わる。
-  const forcedZone: ZoneKey | null = null
+  const forcedZone: ZoneKey | null = !move.discardOnly && card.defId === 'hanmo' ? move.zone : null
 
   const entry: LogEntry = {
     turn: state.turn,
@@ -83,16 +215,14 @@ export function applyMove(state: GameState, move: Move): GameState {
     ...(move.targetUid !== undefined ? { targetUid: move.targetUid } : {}),
     ...(move.moveTo !== undefined ? { moveTo: move.moveTo } : {}),
     ...(move.discardOnly ? { discardOnly: true } : {}),
+    ...(fizzled ? { fizzled: true } : {}),
     ...(forceApplies && !move.discardOnly ? { forced: true } : {}),
   }
 
   const finished = state.turn >= TOTAL_TURNS
 
   return {
-    ...state,
-    zones,
-    hands: withHand(state, nextHand),
-    discard,
+    ...resolved,
     // turn は §4 の「1〜14」を守り、最終ターンでは据え置いて phase で終了を表す
     turn: finished ? state.turn : state.turn + 1,
     current: opponentOf(player),

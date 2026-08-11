@@ -4,7 +4,14 @@ import { playTurn } from '../src/core/apply.ts'
 import { nextInt, seedFrom } from '../src/core/rng.ts'
 import { createGame } from '../src/core/setup.ts'
 import { onEnter } from '../src/core/zone.ts'
-import type { CardId, CardInstance, GameState, ZoneKey, ZoneState } from '../src/core/types.ts'
+import type {
+  CardId,
+  CardInstance,
+  GameState,
+  PlayerId,
+  ZoneKey,
+  ZoneState,
+} from '../src/core/types.ts'
 import { ALL_ZONES } from '../src/core/types.ts'
 
 /** 実カードの uid（0..29）と衝突しない採番を始める位置 */
@@ -40,6 +47,21 @@ export function makeState(spec: Partial<Record<ZoneKey, CardId[]>>): GameState {
 /** ゾーンの index 番目に置かれたカードの uid */
 export function uidOfNth(state: GameState, key: ZoneKey, index: number): number {
   return state.zones[key].cards[index].uid
+}
+
+/** ゾーンに置かれているカードIDを並び順で返す（アサーションを読みやすくするため） */
+export function zoneIds(state: GameState, key: ZoneKey): CardId[] {
+  return state.zones[key].cards.map((c) => c.defId)
+}
+
+export function handIds(state: GameState, p: PlayerId): CardId[] {
+  return state.hands[p].map((c) => c.defId)
+}
+
+/** 指定プレイヤー（既定は current）の手札を差し替える */
+export function withHand(state: GameState, ids: CardId[], p: PlayerId = state.current): GameState {
+  const hand = ids.map(makeCard)
+  return { ...state, hands: p === 0 ? [hand, state.hands[1]] : [state.hands[0], hand] }
 }
 
 /**

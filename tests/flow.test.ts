@@ -5,7 +5,8 @@ import { applyMove, beginTurn, playTurn } from '../src/core/apply.ts'
 import { legalMoves } from '../src/core/moves.ts'
 import { result } from '../src/core/score.ts'
 import { createGame, INITIAL_HAND_SIZE, TOTAL_TURNS } from '../src/core/setup.ts'
-import { allCardUids, playoutRandom } from './helpers.ts'
+import type { GameState } from '../src/core/types.ts'
+import { allCardUids, makeState, playoutRandom, withHand } from './helpers.ts'
 
 const DECK = 30
 
@@ -124,9 +125,52 @@ describe('勝敗判定', () => {
   })
 })
 
+describe('繁茂の強制（§9）', () => {
+  it('繁茂を置いたターンに、自分でセットした制約が消えていない（§7 ステップ3）', () => {
+    const s = withHand(makeState({}), ['hanmo'])
+    const next = applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p0z0' })
+    expect(next.forcedZone).toBe('p0z0')
+  })
+
+  it('強制下のプレイヤーがさらに繁茂を置くと、古い制約が消えて新しい制約が立つ', () => {
+    // p1 は p0z0 に縛られている状態で、その p0z0 に繁茂を置く
+    const base = withHand(makeState({}), ['hanmo'], 1)
+    const s: GameState = { ...base, current: 1, forcedZone: 'p0z0' }
+    const next = applyMove(s, { cardUid: s.hands[1][0].uid, zone: 'p0z0' })
+
+    expect(next.log[0].forced).toBe(true) // 古い制約に従って置いた
+    expect(next.forcedZone).toBe('p0z0') // 新しい制約が立っている
+  })
+
+  it('強制は次の1ターンだけ有効で、そのターンが終われば消える', () => {
+    const s = withHand(makeState({}), ['hanmo'])
+    const afterHanmo = applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p1z1' })
+    expect(afterHanmo.forcedZone).toBe('p1z1')
+
+    // 縛られた p1 のターン：設置先は p1z1 だけ
+    const p1 = withHand(afterHanmo, ['dangai'], 1)
+    expect([...new Set(legalMoves(p1).map((m) => m.zone))]).toEqual(['p1z1'])
+
+    // そのターンを終えると制約は消える
+    const after = applyMove(p1, { cardUid: p1.hands[1][0].uid, zone: 'p1z1' })
+    expect(after.forcedZone).toBeNull()
+  })
+
+  it('強制先が満杯なら強制は不発で、自由に置ける', () => {
+    const base = withHand(makeState({ p1z1: ['hyozan', 'heigen'] }), ['hanmo'])
+    const afterHanmo = applyMove(base, { cardUid: base.hands[0][0].uid, zone: 'p0z0' })
+    // p1z1 が満杯の状態で、そこを強制先にする
+    const p1: GameState = { ...withHand(afterHanmo, ['dangai'], 1), forcedZone: 'p1z1' }
+
+    const zones = [...new Set(legalMoves(p1).map((m) => m.zone))].sort()
+    expect(zones).toEqual(['p0z0', 'p0z1', 'p1z0'])
+
+    const after = applyMove(p1, { cardUid: p1.hands[1][0].uid, zone: 'p0z1' })
+    expect(after.log[0].forced).toBeUndefined()
+  })
+})
+
 describe('設置制約の寿命', () => {
-  // 繁茂そのものは Phase 4 で実装するが、「制約は1ターンで消える」という枠組みは
-  // すでに applyMove の責務なので、forcedZone を直接与えて検証しておく。
   it('制約は適用した1ターンで消える（次ターンへ引き継がない）', () => {
     const s = { ...beginTurn(createGame(1)), forcedZone: 'p1z1' as const }
     const next = applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p1z1' })
