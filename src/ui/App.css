@@ -1,30 +1,591 @@
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #6b6b6b;
+  --line: #d8d4cc;
+  --paper: #fbfaf7;
+  --panel: #ffffff;
+  --accent: #2f7fd8;
+  --accent-soft: #e6f0fb;
+  --warn: #d8642f;
+  --warn-soft: #fdeee6;
+  --good: #2f9e5f;
+  --card-board: 66px;
+  --card-hand: 96px;
+  --radius: 10px;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
 .app {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.app h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.75rem;
-  letter-spacing: 0.1em;
-}
-
-.app .subtitle {
-  margin: 0 0 2rem;
-  opacity: 0.7;
-}
-
-.zone-preview {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: start;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1rem;
 }
 
-.zone-preview div {
-  border: 1px solid currentColor;
-  border-radius: 0.5rem;
-  padding: 1.5rem 1rem;
-  text-align: center;
-  opacity: 0.6;
+.app__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.app__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  position: sticky;
+  top: 1rem;
+}
+
+/* ── トップバー ───────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.topbar__logo {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+}
+
+.topbar__current {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.topbar__turn,
+.topbar__deck {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.topbar__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── 選択ガイド ───────────────────────────────── */
+.picker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.picker--active {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.picker__prompt {
+  margin: 0;
+  font-weight: 700;
+}
+
+.picker__steps {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.picker__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* ── 手札 ─────────────────────────────────────── */
+.hand {
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.hand--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.hand__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.35rem;
+}
+
+.hand__turn {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.hand__cards {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.hand__empty,
+.zone__empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+/* ── 盤面 ─────────────────────────────────────── */
+.board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.zone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  min-height: 9.5rem;
+}
+
+.zone--clickable {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.zone--forced {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.zone--full {
+  background: #f4f2ee;
+}
+
+.zone__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.zone__name {
+  font-weight: 700;
+}
+
+.zone__total b {
+  font-size: 1.15rem;
+}
+
+.zone__badges {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  min-height: 1.1rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.badge--forced {
+  border-color: var(--warn);
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.badge--kagero {
+  border-color: #b06ab8;
+  color: #8e4b96;
+}
+
+.badge--horaana {
+  border-color: #7a7a7a;
+  color: #555;
+}
+
+.badge--lock,
+.badge--full {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.badge--full {
+  border-color: var(--ink-soft);
+  color: var(--ink-soft);
+}
+
+.zone__cards {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  flex: 1;
+  align-content: flex-start;
+}
+
+.zone__place {
+  align-self: flex-start;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── カード ───────────────────────────────────── */
+.card {
+  position: relative;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+  line-height: 0;
+  cursor: default;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 744 / 1039;
+  object-fit: cover;
+}
+
+.card--board {
+  width: var(--card-board);
+}
+
+.card--hand {
+  width: var(--card-hand);
+}
+
+.card--selectable,
+.card--targetable {
+  cursor: pointer;
+}
+
+.card--selectable:hover,
+.card--targetable:hover {
+  transform: translateY(-3px);
+}
+
+.card--selectable {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.card--selected {
+  box-shadow: 0 0 0 3px var(--accent);
+  transform: translateY(-4px);
+}
+
+.card--targetable {
+  box-shadow: 0 0 0 2px var(--warn);
+}
+
+.card__value {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--ink);
+  line-height: 1.35;
+  font-size: 0.72rem;
+}
+
+.card__value b {
+  font-size: 0.85rem;
+}
+
+.card__value s {
+  color: var(--ink-soft);
+  font-size: 0.65rem;
+}
+
+.card__value--changed {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.card__value--muted {
+  opacity: 0.45;
+}
+
+/* ── 右ペイン ─────────────────────────────────── */
+.panel__title {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.scores,
+.detail,
+.log,
+.deck,
+.result {
+  padding: 0.6rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.scores__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0.2rem 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.scores__row.is-turn .scores__name {
+  color: var(--accent);
+}
+
+.scores__name {
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 5.5em;
+}
+
+.scores__value {
+  margin-left: auto;
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+
+.detail__name {
+  margin: 0.4rem 0 0.2rem;
+  font-weight: 700;
+}
+
+.detail__text,
+.detail__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.log__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 15rem;
+  overflow-y: auto;
+  font-size: 0.78rem;
+}
+
+.log__item {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  border-bottom: 1px solid #f0eee9;
+}
+
+.log__turn {
+  color: var(--ink-soft);
+  min-width: 2.2em;
+}
+
+.log__player {
+  min-width: 6em;
+  color: var(--ink-soft);
+}
+
+.log__body {
+  flex: 1;
+}
+
+.log__empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* ── 山札・捨て札 ─────────────────────────────── */
+.deck__row {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.deck__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 裏面画像が届いたら span の束を <img> に差し替える */
+.deck__stack {
+  position: relative;
+  width: 34px;
+  height: 47px;
+}
+
+.deck__stack span {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--ink-soft);
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    45deg,
+    #eceae4,
+    #eceae4 3px,
+    #f7f5f1 3px,
+    #f7f5f1 6px
+  );
+}
+
+.deck__stack span:nth-child(2) {
+  transform: translate(2px, -2px);
+}
+
+.deck__stack span:nth-child(3) {
+  transform: translate(4px, -4px);
+}
+
+.deck__stack--empty span {
+  background: #fff;
+  border-style: dashed;
+}
+
+.deck__count {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.deck__count b {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+/* ── 結果 ─────────────────────────────────────── */
+.result {
+  border-color: var(--good);
+  box-shadow: 0 0 0 3px #e8f6ee;
+}
+
+.result__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  color: var(--good);
+}
+
+.result__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.result__table th,
+.result__table td {
+  padding: 0.15rem 0.25rem;
+  text-align: right;
+}
+
+.result__table thead th {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.result__table tbody th {
+  text-align: left;
+}
+
+.result__row--win b {
+  color: var(--good);
+}
+
+.result__restart {
+  margin-top: 0.6rem;
+  width: 100%;
+  border-color: var(--good);
+  color: var(--good);
+  font-weight: 700;
+}
+
+.seedline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* ── 狭い画面 ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app__side {
+    position: static;
+  }
+
+  :root {
+    --card-board: 56px;
+    --card-hand: 80px;
+  }
 }

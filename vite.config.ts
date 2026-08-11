@@ -9,6 +9,6 @@ export default defineConfig({
   test: {
     // src/core は DOM 非依存なので node 環境で足りる
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
   },
 })
