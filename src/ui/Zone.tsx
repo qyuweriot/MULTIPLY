@@ -1,9 +1,10 @@
-import type { CardInstance, GameState, ZoneKey } from '../core/types.ts'
+import type { GameState, ZoneKey } from '../core/types.ts'
 import { ownerOf, slotOf } from '../core/types.ts'
 import { cardValues, zoneTotal } from '../core/value.ts'
 import { isFull } from '../core/zone.ts'
 import { PLAYER_LABELS, ZONE_LABELS } from '../labels.ts'
 import { Card } from './Card.tsx'
+import type { HoverHandler } from './Card.tsx'
 
 export interface ZoneProps {
   state: GameState
@@ -14,11 +15,13 @@ export interface ZoneProps {
   movable?: boolean
   /** 繁茂により設置が強制されているゾーン */
   forced?: boolean
+  /** ドラッグ中のポインタが乗っている */
+  dragOver?: boolean
   /** 効果の対象に選べるカードの uid */
   targetUids?: Set<number>
   onSelectZone?: () => void
   onSelectTarget?: (uid: number) => void
-  onHover?: (card: CardInstance | null) => void
+  onHover?: HoverHandler
 }
 
 export function Zone({
@@ -27,6 +30,7 @@ export function Zone({
   placeable = false,
   movable = false,
   forced = false,
+  dragOver = false,
   targetUids,
   onSelectZone,
   onSelectTarget,
@@ -47,14 +51,17 @@ export function Zone({
   const classes = [
     'zone',
     clickable ? 'zone--clickable' : '',
+    placeable ? 'zone--droppable' : '',
+    dragOver ? 'zone--dragover' : '',
     forced ? 'zone--forced' : '',
     full ? 'zone--full' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
+  // data-zone はドラッグ中の elementFromPoint でドロップ先を特定するために使う
   return (
-    <section className={classes}>
+    <section className={classes} data-zone={zoneKey}>
       <header className="zone__head">
         <span className="zone__name">
           {PLAYER_LABELS[ownerOf(zoneKey)]}・{ZONE_LABELS[slotOf(zoneKey)]}

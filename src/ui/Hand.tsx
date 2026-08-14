@@ -1,6 +1,7 @@
-import type { CardInstance, GameState, PlayerId } from '../core/types.ts'
+import type { GameState, PlayerId } from '../core/types.ts'
 import { PLAYER_LABELS } from '../labels.ts'
 import { Card } from './Card.tsx'
+import type { HoverHandler, PointerHandlers } from './Card.tsx'
 
 export interface HandProps {
   state: GameState
@@ -8,12 +9,26 @@ export interface HandProps {
   /** 選べる手札の uid（手番でないプレイヤーは空集合） */
   selectableUids: Set<number>
   selectedUid: number | null
-  onSelect: (uid: number) => void
-  onHover: (card: CardInstance | null) => void
+  /** ドラッグ中に持ち上げているカード */
+  draggingUid: number | null
+  /** 選択可能なカードに付けるポインタハンドラ */
+  dragHandlers: (cardUid: number) => PointerHandlers
+  /** キーボード操作（Enter / Space）での選択 */
+  onSelect: (cardUid: number) => void
+  onHover: HoverHandler
 }
 
 /** 手札は両者公開（作業計画書 §0）。伏せ札は存在しない */
-export function Hand({ state, player, selectableUids, selectedUid, onSelect, onHover }: HandProps) {
+export function Hand({
+  state,
+  player,
+  selectableUids,
+  selectedUid,
+  draggingUid,
+  dragHandlers,
+  onSelect,
+  onHover,
+}: HandProps) {
   const active = state.current === player && state.phase === 'playing'
 
   return (
@@ -33,6 +48,8 @@ export function Hand({ state, player, selectableUids, selectedUid, onSelect, onH
               size="hand"
               selectable={selectable}
               selected={selectedUid === card.uid}
+              dragging={draggingUid === card.uid}
+              dragHandlers={selectable ? dragHandlers(card.uid) : undefined}
               onClick={selectable ? () => onSelect(card.uid) : undefined}
               onHover={onHover}
             />
