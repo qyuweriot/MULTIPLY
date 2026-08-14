@@ -1,7 +1,11 @@
 // テスト用の盤面組み立てヘルパ。vite.config.ts の include は tests/**/*.test.ts なので
 // このファイル自体はテストとして実行されない。
-import { playTurn } from '../src/core/apply.ts'
+import type { Difficulty } from '../src/ai/search.ts'
+import { chooseMove } from '../src/ai/search.ts'
+import { visibleTo } from '../src/ai/view.ts'
+import { applyMove, beginTurn, playTurn } from '../src/core/apply.ts'
 import { nextInt, seedFrom } from '../src/core/rng.ts'
+import { result } from '../src/core/score.ts'
 import { createGame } from '../src/core/setup.ts'
 import { onEnter } from '../src/core/zone.ts'
 import type {
@@ -82,6 +86,57 @@ export function playoutRandom(state: GameState, seed: number): GameState {
     })
   }
   return s
+}
+
+/**
+ * CPU 同士を戦わせる。difficulties[0] が先攻。
+ * 思考用の乱数はゲームの state.rng とは別系統にしてある。
+ */
+export function playCpuGame(
+  seed: number,
+  difficulties: [Difficulty, Difficulty],
+  aiSeed = seed,
+): GameState {
+  let s = beginTurn(createGame(seed))
+  let aiRng = seedFrom(aiSeed)
+  let guard = 0
+
+  while (s.phase === 'playing') {
+    if (guard++ > 100) throw new Error('14ターンで終わらなかった')
+    const view = visibleTo(s, s.current)
+    const { move, rng } = chooseMove(view, difficulties[s.current], aiRng)
+    aiRng = rng
+    const after = applyMove(s, move)
+    s = after.phase === 'playing' ? beginTurn(after) : after
+  }
+  return s
+}
+
+/** difficulties を先後入れ替えながら games 回対戦し、[0] 側の勝率を返す */
+export function winRate(
+  difficulties: [Difficulty, Difficulty],
+  games: number,
+): { wins: number; losses: number; draws: number; rate: number } {
+  let wins = 0
+  let losses = 0
+  let draws = 0
+
+  for (let i = 0; i < games; i++) {
+    // 偶数回は [0] が先攻、奇数回は後攻。先攻有利の偏りを打ち消す
+    const swapped = i % 2 === 1
+    const order: [Difficulty, Difficulty] = swapped
+      ? [difficulties[1], difficulties[0]]
+      : difficulties
+    const end = playCpuGame(i, order, i * 7919 + 13)
+    const { winner } = result(end)
+    const target: PlayerId = swapped ? 1 : 0
+
+    if (winner === null) draws++
+    else if (winner === target) wins++
+    else losses++
+  }
+
+  return { wins, losses, draws, rate: wins / games }
 }
 
 /** 手札・山札・捨て札・全ゾーンに散らばっているカードの uid をすべて集める */

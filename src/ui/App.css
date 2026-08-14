@@ -62,6 +62,31 @@ body {
   font-size: 0.9rem;
 }
 
+.topbar__thinking {
+  margin-left: 0.5rem;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.topbar__opponent {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.topbar__opponent select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
 .topbar__actions {
   margin-left: auto;
   display: flex;

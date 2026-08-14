@@ -228,6 +228,17 @@ describe('アプリ全体', () => {
     expect(html.match(/card--selectable/g)).toHaveLength(3)
   })
 
+  it('対戦相手を選べる（人間とCPU3段）', () => {
+    const html = renderToStaticMarkup(<App />)
+    expect(html).toContain('対戦相手')
+    expect(html).toContain('人間（同じ端末で2人）')
+    expect(html).toContain('CPU（易）')
+    expect(html).toContain('CPU（普通）')
+    expect(html).toContain('CPU（強）')
+    // 既定はホットシート。思考中表示は出ない
+    expect(html).not.toContain('思考中')
+  })
+
   it('サイドパネルと山札・捨て札の表示が無い', () => {
     const html = renderToStaticMarkup(<App />)
     expect(html).not.toContain('app__side')

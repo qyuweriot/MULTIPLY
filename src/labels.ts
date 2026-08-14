@@ -3,3 +3,9 @@
 export const ZONE_LABELS = { z0: '第一', z1: '第二' } as const
 
 export const PLAYER_LABELS = ['プレイヤー1', 'プレイヤー2'] as const
+
+export const DIFFICULTY_LABELS = {
+  easy: 'CPU（易）',
+  normal: 'CPU（普通）',
+  hard: 'CPU（強）',
+} as const
