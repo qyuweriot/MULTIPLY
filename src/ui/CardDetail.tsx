@@ -1,10 +1,13 @@
 import { defOf } from '../core/cards.ts'
 import type { CardInstance } from '../core/types.ts'
+import type { PassiveState } from './passives.ts'
 import { CARD_ASPECT, CARD_IMAGES } from './cardImages.ts'
 
 export interface HoveredCard {
   card: CardInstance
   rect: DOMRect
+  /** 盤面のカードなら、いまの数値と常在効果の状態。手札では undefined */
+  note?: { value: string; state: PassiveState; reason: string }
 }
 
 /** カードの横に置く余白 */
@@ -46,6 +49,12 @@ export function CardDetail({ hovered }: { hovered: HoveredCard | null }) {
       <p className="detail__name">
         {def.name}（{def.reading}）
       </p>
+      {hovered.note !== undefined && (
+        <p className={`detail__note detail__note--${hovered.note.state}`}>
+          {hovered.note.value}
+          {hovered.note.reason !== '' && ` ／ ${hovered.note.reason}`}
+        </p>
+      )}
     </div>
   )
 }

@@ -377,7 +377,7 @@
 .cutin--shippu .cutin__motif::after {
   background: repeating-linear-gradient(
     92deg,
-    rgba(255, 255, 255, 0.32) 0 2px,
+    rgba(255, 255, 255, 0.2) 0 2px,
     transparent 2px 46px
   );
   animation: fx-gust 760ms linear infinite;

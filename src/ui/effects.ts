@@ -10,6 +10,7 @@
 import { CARD_DEFS } from '../core/cards.ts'
 import type { CardId, CardInstance, GameState, PlayerId, ZoneKey } from '../core/types.ts'
 import { ALL_ZONES } from '../core/types.ts'
+import { passiveStatus } from './passives.ts'
 
 // ★ 尺を変えるときは effects.css の --fx-cutin / --fx-board も必ず揃えること。
 //   CSS 側のキーフレームはこの2つの変数を尺として使っている。
@@ -44,6 +45,13 @@ export interface EffectEvent {
   removed: CardInstance[]
   /** 渦潮による移動 */
   moved?: { card: CardInstance; from: ZoneKey; to: ZoneKey }
+  /**
+   * この着手で常在効果の状態が変わったカードの uid。
+   *
+   * 置かれたカード自身とは限らない。3枚目が置かれて断崖が0になる、
+   * 相手が陽炎を置いて月光が止まる、といった**他人の手で条件が動いた瞬間**も入る。
+   */
+  lit: number[]
 }
 
 function boardCards(state: GameState): CardInstance[] {
@@ -99,8 +107,25 @@ export function describeEffect(prev: GameState, next: GameState, seq: number): E
     forced: entry.forced === true,
     discardOnly: entry.discardOnly === true,
     removed,
+    lit: changedPassives(prev, next),
     ...(moved !== undefined ? { moved } : {}),
   }
+}
+
+/** 常在効果の状態が変わったカードを、全ゾーンから拾う */
+function changedPassives(prev: GameState, next: GameState): number[] {
+  const out: number[] = []
+  for (const zone of ALL_ZONES) {
+    for (const card of next.zones[zone].cards) {
+      const now = passiveStatus(next, zone, card).state
+      if (now === 'none') continue
+      // 直前にその盤面のどこに居たかを探す。新しく置かれたカードは prev に居ない
+      const wasZone = ALL_ZONES.find((z) => prev.zones[z].cards.some((c) => c.uid === card.uid))
+      const before = wasZone === undefined ? 'none' : passiveStatus(prev, wasZone, card).state
+      if (before !== now) out.push(card.uid)
+    }
+  }
+  return out
 }
 
 /** そのゾーンで演出を光らせるか（渦潮は移動元と移動先の両方） */

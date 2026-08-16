@@ -50,6 +50,17 @@ export function selectableTargets(moves: Move[], sel: Selection): Set<number> {
   )
 }
 
+/**
+ * 対象カードをつまんで移動先へ運べるか。
+ *
+ * 渦潮は運べる（移動先がある）が、刺創は捨て札にするだけで移動先が無いので運べない。
+ * 手を見て決めるので、UI 側でカード名を判定する必要はない。
+ */
+export function targetsDraggable(moves: Move[], sel: Selection): boolean {
+  if (sel.step !== 'target') return false
+  return matching(moves, sel).some((m) => m.moveTo !== undefined)
+}
+
 /** 渦潮の移動先候補 */
 export function selectableMoveTos(moves: Move[], sel: Selection): Set<ZoneKey> {
   if (sel.step !== 'moveTo') return new Set()
@@ -104,15 +115,23 @@ export function backSelection(sel: Selection): Selection {
   }
 }
 
-/** UI に出す案内文 */
-export function selectionPrompt(sel: Selection): string {
+/**
+ * UI に出す案内文。
+ *
+ * 対象選択の段だけは、運べるかどうかで文言を変える。「効果の対象を選ぶ」とだけ
+ * 出していたせいで、渦潮を置いたあと何を求められているのか伝わらず、
+ * 不具合と誤解される事故が起きた。
+ */
+export function selectionPrompt(sel: Selection, draggable = false): string {
   switch (sel.step) {
     case 'card':
       return '手札からカードを選ぶ'
     case 'zone':
       return '置くゾーンを選ぶ'
     case 'target':
-      return '効果の対象にするカードを選ぶ'
+      return draggable
+        ? '移動させるカードを、移動先のゾーンへドラッグ'
+        : '効果の対象にするカードを選ぶ'
     case 'moveTo':
       return '移動先のゾーンを選ぶ'
   }

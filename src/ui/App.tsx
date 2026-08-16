@@ -10,6 +10,7 @@ import { legalMoves } from '../core/moves.ts'
 import { seedFrom } from '../core/rng.ts'
 import { createGame, TOTAL_TURNS } from '../core/setup.ts'
 import type { CardInstance, GameState, Move, PlayerId, ZoneKey } from '../core/types.ts'
+import { ALL_ZONES } from '../core/types.ts'
 import { DIFFICULTY_LABELS, PLAYER_LABELS } from '../labels.ts'
 import { Board } from './Board.tsx'
 import { Card } from './Card.tsx'
@@ -17,7 +18,7 @@ import { CardDetail } from './CardDetail.tsx'
 import type { HoveredCard } from './CardDetail.tsx'
 import { EffectLayer } from './EffectLayer.tsx'
 import type { EffectEvent, MotionMode } from './effects.ts'
-import { BOARD_MS, CUTIN_MS, describeEffect } from './effects.ts'
+import { BOARD_MS, CUTIN_MS, describeEffect, findCard } from './effects.ts'
 import { Hand } from './Hand.tsx'
 import { Log } from './Log.tsx'
 import { Result } from './Result.tsx'
@@ -32,7 +33,9 @@ import {
   selectableTargets,
   selectableZones,
   START,
+  targetsDraggable,
 } from './selection.ts'
+import { passiveStatus, valueNote } from './passives.ts'
 import { useCardDrag } from './useCardDrag.ts'
 
 /** 詳細オーバーレイを出すまでの待ち時間。盤面を横切るたびの点滅を防ぐ */
@@ -164,9 +167,18 @@ export default function App() {
         setHovered(null)
         return
       }
-      hoverTimer.current = setTimeout(() => setHovered({ card, rect }), HOVER_DELAY_MS)
+      // 盤面のカードなら、いまの数値と常在効果の状態も添える
+      const zone = ALL_ZONES.find((z) => state.zones[z].cards.some((c) => c.uid === card.uid))
+      const note =
+        zone === undefined
+          ? undefined
+          : { value: valueNote(state, zone, card), ...passiveStatus(state, zone, card) }
+      hoverTimer.current = setTimeout(
+        () => setHovered(note === undefined ? { card, rect } : { card, rect, note }),
+        HOVER_DELAY_MS,
+      )
     },
-    [clearHoverTimer],
+    [clearHoverTimer, state],
   )
 
   useEffect(() => clearHoverTimer, [clearHoverTimer])
@@ -216,6 +228,30 @@ export default function App() {
     onDrop: (zone, cardUid) => applyPick({ zone }, { step: 'zone', cardUid }),
     onClick: (cardUid) => applyPick({ cardUid }, START),
     onCancel: () => setSelection(START),
+  })
+
+  // 渦潮の対象を、移動先ゾーンへ運ぶドラッグ。
+  // useCardDrag は「カード uid ＋ ドロップ可能ゾーン集合」しか知らないので、
+  // 手札用とまったく同じフックを2つ目のインスタンスとして呼ぶだけで足りる。
+  const targetSel = selection.step === 'target' ? selection : null
+  const targetDrag = useCardDrag({
+    onDragStart: () => {
+      clearHoverTimer()
+      setHovered(null)
+    },
+    droppableZones: (targetUid) =>
+      targetSel === null
+        ? new Set<ZoneKey>()
+        : selectableMoveTos(moves, { ...targetSel, step: 'moveTo', targetUid }),
+    onDrop: (moveTo, targetUid) => {
+      if (targetSel === null) return
+      applyPick({ moveTo }, { ...targetSel, step: 'moveTo', targetUid })
+    },
+    // 動かさずに離したときは、これまでどおり対象の選択として扱う
+    onClick: (targetUid) => {
+      if (targetSel !== null) applyPick({ targetUid }, targetSel)
+    },
+    onCancel: () => {},
   })
 
   // ── CPU の手番 ──────────────────────────────────────────────────
@@ -277,7 +313,16 @@ export default function App() {
     playing && state.current === p && humanControls(p)
       ? selectableCards(moves)
       : new Set<number>()
-  const dragOverZone: ZoneKey | null = drag?.over ?? null
+  const dragOverZone: ZoneKey | null = drag?.over ?? targetDrag.drag?.over ?? null
+
+  // 対象を運んでいる最中は、まだ selection が 'target' の段のままなので
+  // selectableMoveTos では候補が空になる。つまんでいるカードから直接組み立てて、
+  // 落とせるゾーンを強調する（強調が無いとどこへ運べるのか分からない）
+  const carrying = targetDrag.drag
+  const movableZones =
+    carrying !== null && targetSel !== null
+      ? selectableMoveTos(moves, { ...targetSel, step: 'moveTo', targetUid: carrying.cardUid })
+      : selectableMoveTos(moves, selection)
 
   /** 平原は使用者の手札、疾風は両者の手札に重ねる */
   const handFx = (p: PlayerId) => {
@@ -288,7 +333,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app ${drag !== null ? 'app--dragging' : ''}`}>
+    <div className={`app ${drag !== null || targetDrag.drag !== null ? 'app--dragging' : ''}`}>
       <header className="topbar">
         <h1 className="topbar__logo">MULTIPLY</h1>
         <span className="topbar__turn">
@@ -332,6 +377,7 @@ export default function App() {
         <TargetPicker
           state={state}
           selection={selection}
+          moves={moves}
           onBack={() => setSelection(backSelection(selection))}
           onReset={() => setSelection(START)}
         />
@@ -354,9 +400,12 @@ export default function App() {
       <Board
         state={state}
         placeableZones={selectableZones(moves, selection)}
-        movableZones={selectableMoveTos(moves, selection)}
+        movableZones={movableZones}
         targetUids={selectableTargets(moves, selection)}
         dragOverZone={dragOverZone}
+        targetDraggable={targetsDraggable(moves, selection)}
+        targetDragHandlers={targetDrag.handlers}
+        draggingUid={targetDrag.drag?.cardUid ?? null}
         effect={boardFx}
         onSelectZone={(zone) => pick({ zone })}
         onSelectMoveTo={(moveTo) => pick({ moveTo })}
@@ -386,8 +435,15 @@ export default function App() {
       </footer>
 
       {drag !== null && <DragGhost state={state} cardUid={drag.cardUid} ghostRef={ghostRef} />}
+      {targetDrag.drag !== null && (
+        <DragGhost
+          state={state}
+          cardUid={targetDrag.drag.cardUid}
+          ghostRef={targetDrag.ghostRef}
+        />
+      )}
       {/* ドラッグ中は詳細を出さない。ref ではなく描画時の導出なのでリセット漏れが起きない */}
-      <CardDetail hovered={drag !== null ? null : hovered} />
+      <CardDetail hovered={drag !== null || targetDrag.drag !== null ? null : hovered} />
 
       <EffectLayer
         event={playback.event}
@@ -412,7 +468,8 @@ function DragGhost({
   cardUid: number
   ghostRef: RefObject<HTMLDivElement | null>
 }) {
-  const card = state.hands[state.current].find((c) => c.uid === cardUid)
+  // 手札のカードだけでなく、渦潮で運んでいる盤面のカードも引けるようにする
+  const card = findCard(state, cardUid)
   if (card === undefined) return null
 
   return (

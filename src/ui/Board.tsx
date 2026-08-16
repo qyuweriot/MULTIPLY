@@ -2,7 +2,7 @@ import { result } from '../core/score.ts'
 import type { GameState, PlayerId, ZoneKey } from '../core/types.ts'
 import { zonesOf } from '../core/types.ts'
 import { score, zoneTotal } from '../core/value.ts'
-import type { HoverHandler } from './Card.tsx'
+import type { HoverHandler, PointerHandlers } from './Card.tsx'
 import type { EffectEvent } from './effects.ts'
 import { isEffectZone } from './effects.ts'
 import { Zone } from './Zone.tsx'
@@ -13,6 +13,12 @@ export interface BoardProps {
   movableZones: Set<ZoneKey>
   targetUids: Set<number>
   dragOverZone: ZoneKey | null
+  /** 対象カードをつまんで移動先へ運べるか（渦潮は true、刺創は false） */
+  targetDraggable?: boolean
+  /** 対象カードに渡すポインタハンドラ */
+  targetDragHandlers?: (cardUid: number) => PointerHandlers
+  /** 運搬中で持ち上げられているカード */
+  draggingUid?: number | null
   /** 再生中の演出。関係するゾーンにだけモーションを重ねる */
   effect?: EffectEvent | null
   onSelectZone: (zone: ZoneKey) => void
@@ -74,12 +80,18 @@ export function Board({
   movableZones,
   targetUids,
   dragOverZone,
+  targetDraggable = false,
+  targetDragHandlers,
+  draggingUid = null,
   effect = null,
   onSelectZone,
   onSelectMoveTo,
   onSelectTarget,
   onHover,
 }: BoardProps) {
+  // 常在効果の状態が変わったカード。着手のたびにひと押し光らせる
+  const lit = new Set(effect?.lit ?? [])
+
   const renderZone = (zoneKey: ZoneKey) => (
     <Zone
       key={zoneKey}
@@ -92,6 +104,10 @@ export function Board({
       forced={state.phase === 'playing' && state.forcedZone === zoneKey}
       dragOver={dragOverZone === zoneKey}
       targetUids={targetUids}
+      targetDraggable={targetDraggable}
+      targetDragHandlers={targetDragHandlers}
+      draggingUid={draggingUid}
+      litUids={lit}
       fx={
         effect !== null && isEffectZone(effect, zoneKey)
           ? { cardId: effect.cardId, seq: effect.seq }

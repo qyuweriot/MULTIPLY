@@ -2,7 +2,7 @@
 // jsdom などの追加依存は要らない。
 // （ドラッグのポインタ操作だけは DOM が要るため手動確認とする）
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { beginTurn } from '../src/core/apply.ts'
 import { CARD_DEFS } from '../src/core/cards.ts'
 import { createGame } from '../src/core/setup.ts'
@@ -10,10 +10,12 @@ import type { GameState } from '../src/core/types.ts'
 import App from '../src/ui/App.tsx'
 import { Board } from '../src/ui/Board.tsx'
 import { CardDetail } from '../src/ui/CardDetail.tsx'
+import type { HoveredCard } from '../src/ui/CardDetail.tsx'
 import { EffectLayer } from '../src/ui/EffectLayer.tsx'
 import type { EffectEvent } from '../src/ui/effects.ts'
 import { Hand } from '../src/ui/Hand.tsx'
 import { Result } from '../src/ui/Result.tsx'
+import { passiveStatus, valueNote } from '../src/ui/passives.ts'
 import { makeState, withHand } from './helpers.ts'
 
 const noop = () => {}
@@ -53,6 +55,7 @@ function event(over: Partial<EffectEvent> = {}): EffectEvent {
     forced: false,
     discardOnly: false,
     removed: [],
+    lit: [],
     ...over,
   }
 }
@@ -61,6 +64,18 @@ function renderCutIn(e: EffectEvent) {
   return renderToStaticMarkup(
     <EffectLayer event={e} showCutIn ghostLayerRef={{ current: null }} onSkip={noop} />,
   )
+}
+
+/** CardDetail は配置をビューポートから決めるので、node 環境では窓を与えてやる */
+const RECT = { left: 100, top: 100, right: 180, bottom: 210, width: 80, height: 110 } as DOMRect
+
+function renderDetail(hovered: HoveredCard) {
+  vi.stubGlobal('window', { innerWidth: 1280, innerHeight: 800 })
+  try {
+    return renderToStaticMarkup(<CardDetail hovered={hovered} />)
+  } finally {
+    vi.unstubAllGlobals()
+  }
 }
 
 function renderHand(state: GameState, player: 0 | 1, selectable: Set<number>) {
@@ -115,8 +130,15 @@ describe('盤面の描画', () => {
     expect(html).toContain('card__value--muted')
   })
 
-  it('陽炎ゾーンに効果無効バッジが出る', () => {
-    expect(renderBoard(makeState({ p0z0: ['kagero'] }))).toContain('陽炎：効果無効')
+  it('陽炎が実際に何かを止めていればバッジが出る', () => {
+    // 月光がいなければ断崖は3。陽炎はその書き換えを止めている
+    expect(renderBoard(makeState({ p0z0: ['kagero', 'gekko'] }))).toContain('陽炎：効果無効')
+  })
+
+  it('陽炎が何も止めていなければバッジを出さない（条件未達としてカードの枠だけで示す）', () => {
+    const html = renderBoard(makeState({ p0z0: ['kagero'] }))
+    expect(html).not.toContain('陽炎：効果無効')
+    expect(html).toContain('card--dormant')
   })
 
   it('氷山ゾーンに設置制限のバッジが出る', () => {
@@ -165,6 +187,75 @@ describe('盤面の描画', () => {
     )
     expect(html.match(/zone--droppable/g)).toHaveLength(2)
     expect(html.match(/zone--dragover/g)).toHaveLength(1)
+  })
+})
+
+describe('常在効果の可視化', () => {
+  it('発動中・無効化・条件未達がカードの枠で見分けられる', () => {
+    // 陽炎（月光を止めている＝発動中）／月光（陽炎に潰されて無効）／双翼（片翼なので条件未達）
+    const html = renderBoard(makeState({ p0z0: ['kagero', 'gekko', 'soyoku'] }))
+    expect(html).toContain('card--active')
+    expect(html).toContain('card--negated')
+    expect(html).toContain('card--dormant')
+  })
+
+  it('無効化されているバッジは打ち消し線で出る', () => {
+    const html = renderBoard(makeState({ p0z0: ['kagero', 'horaana'] }))
+    expect(html).toContain('badge--negated')
+    expect(html).toContain('<s>洞穴：合計5固定</s>')
+  })
+
+  it('月光にもバッジが出る（以前は月光だけ表示が無かった）', () => {
+    expect(renderBoard(makeState({ p0z0: ['gekko'] }))).toContain('月光：1は3・他は0')
+  })
+
+  it('設置時効果のカードには状態の枠を付けない', () => {
+    const html = renderBoard(makeState({ p0z0: ['shiso', 'uzushio'] }))
+    expect(html).not.toContain('card--active')
+    expect(html).not.toContain('card--negated')
+    expect(html).not.toContain('card--dormant')
+  })
+
+  it('状態が変わったカードだけを光らせる', () => {
+    const s = makeState({ p0z0: ['dangai', 'heigen', 'soyoku'] })
+    const dangai = s.zones.p0z0.cards[0].uid
+    const html = renderBoard(s, event({ lit: [dangai] }))
+    expect(html.match(/card--lit/g)).toHaveLength(1)
+    expect(html).toMatch(new RegExp(`card--lit[^>]*data-card-uid="${dangai}"`))
+  })
+})
+
+describe('渦潮の対象をつまんで運ぶ', () => {
+  const carrying = (targetDraggable: boolean) => {
+    const s = makeState({ p0z0: ['heigen'] })
+    return renderToStaticMarkup(
+      <Board
+        state={s}
+        placeableZones={new Set()}
+        movableZones={new Set(['p1z0'])}
+        targetUids={new Set([s.zones.p0z0.cards[0].uid])}
+        targetDraggable={targetDraggable}
+        targetDragHandlers={noHandlers}
+        dragOverZone={null}
+        onSelectZone={noop}
+        onSelectMoveTo={noop}
+        onSelectTarget={noop}
+        onHover={noop}
+      />,
+    )
+  }
+
+  it('運べる局面では、対象カードが操作可能になる（ドラッグハンドラが付く）', () => {
+    const html = carrying(true)
+    expect(html).toContain('card--targetable')
+    // ハンドラの有無は aria-disabled に出る
+    expect(html).toContain('aria-disabled="false"')
+  })
+
+  it('運べない局面（刺創）でも、クリックでの対象選択は残る', () => {
+    const html = carrying(false)
+    expect(html).toContain('card--targetable')
+    expect(html).toContain('aria-disabled="false"')
   })
 })
 
@@ -249,6 +340,24 @@ describe('ホバー詳細（相手の手札・盤面も対象）', () => {
 
   it('ホバー前は詳細オーバーレイを描画しない', () => {
     expect(renderToStaticMarkup(<CardDetail hovered={null} />)).toBe('')
+  })
+
+  it('盤面のカードは、現在値と常在効果の理由を一行で添える', () => {
+    const s = makeState({ p0z0: ['dangai', 'heigen', 'hanmo'] })
+    const card = s.zones.p0z0.cards[0]
+    const html = renderDetail({
+      card,
+      rect: RECT,
+      note: { value: valueNote(s, 'p0z0', card), ...passiveStatus(s, 'p0z0', card) },
+    })
+    expect(html).toContain('数値 3 → 0')
+    expect(html).toContain('3枚以上あるので数値が0になっている')
+    expect(html).toContain('detail__note--active')
+  })
+
+  it('手札のカードには理由を添えない', () => {
+    const s = withHand(makeState({}), ['dangai'])
+    expect(renderDetail({ card: s.hands[0][0], rect: RECT })).not.toContain('detail__note')
   })
 })
 

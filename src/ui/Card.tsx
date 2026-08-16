@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { base, defOf } from '../core/cards.ts'
 import type { CardInstance } from '../core/types.ts'
+import type { PassiveState } from './passives.ts'
 import { CARD_IMAGES } from './cardImages.ts'
 
 /** ホバー通知。矩形は詳細オーバーレイの配置に使う（マウス座標だと追従してちらつく） */
@@ -24,6 +25,10 @@ export interface CardProps {
   selected?: boolean
   /** 効果の対象候補としてのハイライト */
   targetable?: boolean
+  /** 常在効果がいまどうなっているか。盤面のカードにだけ渡す */
+  status?: PassiveState
+  /** この着手で状態が変わった。ひと押し光らせる */
+  lit?: boolean
   /** ドラッグ中で持ち上げられている（元の位置は薄く見せる） */
   dragging?: boolean
   size?: 'board' | 'hand' | 'detail'
@@ -40,6 +45,8 @@ export function Card({
   selectable = false,
   selected = false,
   targetable = false,
+  status = 'none',
+  lit = false,
   dragging = false,
   size = 'board',
   onClick,
@@ -57,6 +64,8 @@ export function Card({
     selectable ? 'card--selectable' : '',
     selected ? 'card--selected' : '',
     targetable ? 'card--targetable' : '',
+    status !== 'none' ? `card--${status}` : '',
+    lit ? 'card--lit' : '',
     dragging ? 'card--dragging' : '',
   ]
     .filter(Boolean)

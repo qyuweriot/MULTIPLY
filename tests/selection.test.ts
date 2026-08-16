@@ -12,6 +12,7 @@ import {
   selectableTargets,
   selectableZones,
   START,
+  targetsDraggable,
 } from '../src/ui/selection.ts'
 import type { Selection } from '../src/ui/selection.ts'
 import { makeState, withHand } from './helpers.ts'
@@ -214,5 +215,44 @@ describe('UI の選択フローだけでゲームが完走する', () => {
       expect(state.phase, `seed=${seed}`).toBe('finished')
       expect(state.log, `seed=${seed}`).toHaveLength(TOTAL_TURNS)
     }
+  })
+})
+
+describe('対象を運べるか（渦潮のドラッグ&ドロップ）', () => {
+  /** そのカードを p0z0 に置こうとしている、対象選択の段 */
+  const targeting = (state: GameState) => ({
+    moves: legalMoves(state, 'p0z0'),
+    sel: { step: 'target', cardUid: state.hands[0][0].uid, zone: 'p0z0' } as Selection,
+  })
+
+  it('渦潮は運べる（移動先がある）', () => {
+    const s = withHand(makeState({ p0z0: ['heigen'] }), ['uzushio'])
+    const { moves, sel } = targeting(s)
+    expect(targetsDraggable(moves, sel)).toBe(true)
+  })
+
+  it('刺創は運べない（捨て札にするだけで移動先が無い）', () => {
+    const s = withHand(makeState({ p0z0: ['heigen'] }), ['shiso'])
+    const { moves, sel } = targeting(s)
+    // 対象そのものは選べる
+    expect(selectableTargets(moves, sel).size).toBe(1)
+    expect(targetsDraggable(moves, sel)).toBe(false)
+  })
+
+  it('渦潮でも移動先が1つも無ければ運べない（不発）', () => {
+    // 移動対象は平原（本来1）。他の3ゾーンはすべて氷山なので送り込めない
+    const s = withHand(
+      makeState({ p0z0: ['heigen'], p0z1: ['hyozan'], p1z0: ['hyozan'], p1z1: ['hyozan'] }),
+      ['uzushio'],
+    )
+    const { moves, sel } = targeting(s)
+    expect(targetsDraggable(moves, sel)).toBe(false)
+  })
+
+  it('対象選択の段でなければつねに false', () => {
+    const s = withHand(makeState({ p0z0: ['heigen'] }), ['uzushio'])
+    const moves = legalMoves(s, 'p0z0')
+    expect(targetsDraggable(moves, START)).toBe(false)
+    expect(targetsDraggable(moves, { step: 'zone', cardUid: s.hands[0][0].uid })).toBe(false)
   })
 })

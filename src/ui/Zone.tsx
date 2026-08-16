@@ -1,10 +1,9 @@
 import type { CardId, GameState, ZoneKey } from '../core/types.ts'
-import { ownerOf, slotOf } from '../core/types.ts'
 import { cardValues, zoneTotal } from '../core/value.ts'
-import { HYOZAN_ALLOWED_VALUE, isRestricted } from '../core/zone.ts'
-import { PLAYER_LABELS, ZONE_LABELS } from '../labels.ts'
+import { zoneName } from '../labels.ts'
 import { Card } from './Card.tsx'
-import type { HoverHandler } from './Card.tsx'
+import type { HoverHandler, PointerHandlers } from './Card.tsx'
+import { passiveStatus, zoneBadges } from './passives.ts'
 
 export interface ZoneProps {
   state: GameState
@@ -19,6 +18,14 @@ export interface ZoneProps {
   dragOver?: boolean
   /** 効果の対象に選べるカードの uid */
   targetUids?: Set<number>
+  /** 対象カードをつまんで移動先へ運べるか（渦潮は true、刺創は false） */
+  targetDraggable?: boolean
+  /** 対象カードに渡すポインタハンドラ */
+  targetDragHandlers?: (cardUid: number) => PointerHandlers
+  /** 運搬中で持ち上げられているカード */
+  draggingUid?: number | null
+  /** この着手で常在効果の状態が変わったカード */
+  litUids?: Set<number>
   /** このゾーンに重ねる演出。key を兼ねる seq とセットで渡す */
   fx?: { cardId: CardId; seq: number } | null
   onSelectZone?: () => void
@@ -34,6 +41,10 @@ export function Zone({
   forced = false,
   dragOver = false,
   targetUids,
+  targetDraggable = false,
+  targetDragHandlers,
+  draggingUid = null,
+  litUids,
   fx = null,
   onSelectZone,
   onSelectTarget,
@@ -42,21 +53,21 @@ export function Zone({
   const zone = state.zones[zoneKey]
   const values = cardValues(state, zoneKey)
   const total = zoneTotal(state, zoneKey)
+  const badges = zoneBadges(state, zoneKey, forced)
 
-  const has = (id: string) => zone.cards.some((c) => c.defId === id)
-  const kagero = has('kagero')
-  // 洞穴は合計を5に上書きするので、個別値は合計に反映されない
-  const horaanaFixed = !kagero && has('horaana')
-  const restricted = isRestricted(zone)
+  const has = (id: CardId) => zone.cards.some((c) => c.defId === id)
+  // 洞穴は合計を上書きするので、個別値は合計に反映されない
+  const horaanaFixed = !has('kagero') && has('horaana')
 
   const clickable = placeable || movable
   const classes = [
     'zone',
     clickable ? 'zone--clickable' : '',
-    placeable ? 'zone--droppable' : '',
+    // 設置先も渦潮の移動先も「落とせる場所」として同じ強調にする
+    clickable ? 'zone--droppable' : '',
     dragOver ? 'zone--dragover' : '',
     forced ? 'zone--forced' : '',
-    restricted ? 'zone--restricted' : '',
+    has('hyozan') ? 'zone--restricted' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -68,27 +79,30 @@ export function Zone({
         <span className={`zone__fx zone__fx--${fx.cardId}`} key={fx.seq} aria-hidden="true" />
       )}
       <header className="zone__head">
-        <span className="zone__name">
-          {PLAYER_LABELS[ownerOf(zoneKey)]}・{ZONE_LABELS[slotOf(zoneKey)]}
-        </span>
+        <span className="zone__name">{zoneName(zoneKey)}</span>
         <span className="zone__total">
           合計 <b>{total}</b>
         </span>
       </header>
 
+      {/* どのバッジを出すかは passives.ts が決める。ここで条件を書くと
+          「月光だけバッジが無い」「無効化されていても有効と同じ顔で出る」が起きる */}
       <div className="zone__badges">
-        {forced && <span className="badge badge--forced">繁茂：ここに置く</span>}
-        {kagero && <span className="badge badge--kagero">陽炎：効果無効</span>}
-        {horaanaFixed && <span className="badge badge--horaana">洞穴：合計5固定</span>}
-        {restricted && (
-          <span className="badge badge--lock">氷山：数値{HYOZAN_ALLOWED_VALUE}のみ</span>
-        )}
+        {badges.map((b) => (
+          <span
+            key={b.id}
+            className={`badge badge--${b.id} ${b.negated ? 'badge--negated' : ''}`}
+          >
+            {b.negated ? <s>{b.text}</s> : b.text}
+          </span>
+        ))}
       </div>
 
       <div className="zone__cards">
         {zone.cards.length === 0 && <p className="zone__empty">（空）</p>}
         {zone.cards.map((card) => {
           const targetable = targetUids?.has(card.uid) ?? false
+          const draggable = targetable && targetDraggable
           return (
             <Card
               key={card.uid}
@@ -96,6 +110,10 @@ export function Zone({
               value={values.get(card.uid)}
               muted={horaanaFixed}
               targetable={targetable}
+              status={passiveStatus(state, zoneKey, card).state}
+              lit={litUids?.has(card.uid) ?? false}
+              dragging={draggingUid === card.uid}
+              dragHandlers={draggable ? targetDragHandlers?.(card.uid) : undefined}
               onClick={targetable ? () => onSelectTarget?.(card.uid) : undefined}
               onHover={onHover}
             />

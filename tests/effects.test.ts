@@ -149,6 +149,37 @@ describe('繁茂の強制と安全弁', () => {
   })
 })
 
+describe('常在効果の状態が変わったカード（lit）', () => {
+  it('他人の手で条件が成立した瞬間も拾う（3枚目で断崖が0になる）', () => {
+    // 断崖と平原の2枚があるゾーンへ、3枚目を置く。置いたのは断崖ではない
+    const s = withHand(makeState({ p0z0: ['dangai', 'heigen'] }), ['soyoku'])
+    const dangai = uidOfNth(s, 'p0z0', 0)
+    const { event } = play(s)
+
+    expect(event.lit).toContain(dangai)
+  })
+
+  it('条件が動いていなければ光らせない', () => {
+    // 2枚目を置くだけ。断崖の3枚条件はまだ満たされない
+    const s = withHand(makeState({ p0z0: ['dangai'] }), ['soyoku'])
+    const dangai = uidOfNth(s, 'p0z0', 0)
+    expect(play(s).event.lit).not.toContain(dangai)
+  })
+
+  it('相手が陽炎を置いて月光が止まった瞬間も拾う', () => {
+    const s = withHand(makeState({ p0z0: ['gekko', 'heigen'] }), ['kagero'])
+    const gekko = uidOfNth(s, 'p0z0', 0)
+    const { event } = play(s)
+
+    expect(event.lit).toContain(gekko) // active → negated
+  })
+
+  it('常在を持たないカードは光らせない', () => {
+    const s = withHand(makeState({}), ['shiso'])
+    expect(play(s).event.lit).toEqual([])
+  })
+})
+
 describe('演出を出すゾーンの判定', () => {
   it('渦潮は移動元と移動先の両方が対象になる', () => {
     const s = withHand(makeState({ p0z0: ['heigen'] }), ['uzushio'])

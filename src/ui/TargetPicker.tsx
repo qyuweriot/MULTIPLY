@@ -1,18 +1,21 @@
 import { defOf } from '../core/cards.ts'
-import type { GameState } from '../core/types.ts'
+import type { GameState, Move } from '../core/types.ts'
 import { zoneName } from '../labels.ts'
 import type { Selection } from './selection.ts'
-import { selectionPrompt } from './selection.ts'
+import { selectionPrompt, targetsDraggable } from './selection.ts'
 
 export interface TargetPickerProps {
   state: GameState
   selection: Selection
+  /** 対象を運べる局面か（渦潮）。案内文の出し分けに使う */
+  moves: Move[]
   onBack: () => void
   onReset: () => void
 }
 
 /** 多段選択（カード → ゾーン → 対象 → 移動先）の進行状況と取り消し */
-export function TargetPicker({ state, selection, onBack, onReset }: TargetPickerProps) {
+export function TargetPicker({ state, selection, moves, onBack, onReset }: TargetPickerProps) {
+  const draggable = targetsDraggable(moves, selection)
   if (selection.step === 'card') {
     return (
       <div className="picker">
@@ -33,7 +36,7 @@ export function TargetPicker({ state, selection, onBack, onReset }: TargetPicker
 
   return (
     <div className="picker picker--active">
-      <p className="picker__prompt">{selectionPrompt(selection)}</p>
+      <p className="picker__prompt">{selectionPrompt(selection, draggable)}</p>
       <p className="picker__steps">{steps.join(' → ')}</p>
       <div className="picker__actions">
         <button type="button" onClick={onBack}>

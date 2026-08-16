@@ -321,9 +321,20 @@ button:disabled {
   color: #555;
 }
 
-.badge--lock {
+.badge--hyozan {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.badge--gekko {
+  border-color: #5b7fd8;
+  color: #4560ad;
+}
+
+/* 上の層に潰されているバッジ。文字は打ち消し線、枠は淡く */
+.badge--negated {
+  opacity: 0.55;
+  border-style: dashed;
 }
 
 .zone__cards {
@@ -483,6 +494,51 @@ button:disabled {
   transform: none;
 }
 
+/* ── 常在効果の状態 ───────────────────────────────
+   枠の色で「いま効いているか」を示す。理由の一行はホバー詳細に出る。
+   選択・対象のハイライト（card--selectable / card--targetable）は操作の話なので、
+   そちらが付いているあいだは box-shadow が上書きして構わない。 */
+.card--active {
+  box-shadow: 0 0 0 2px var(--good);
+}
+
+.card--negated {
+  box-shadow: 0 0 0 2px #9b6ab8;
+  /* 無効化されているカードは、枠を破線に見せて「効いていない」を伝える */
+  outline: 2px dashed #9b6ab8;
+  outline-offset: -5px;
+}
+
+/* 常在は持っているが条件を満たしていない。素の枠（--line）と紛れないよう、
+   はっきり濃さを変えておく */
+.card--dormant {
+  box-shadow: 0 0 0 2px #a09a90;
+}
+
+/* 状態が変わった瞬間だけ、その色でひと押し光らせる。
+   カットインが引けてから光るよう、遅延は effects.css 側の変数に合わせてある */
+.card--lit {
+  animation: fx-lit var(--fx-board, 1200ms) ease-out var(--fx-cutin, 2000ms) 1;
+}
+
+@keyframes fx-lit {
+  0%,
+  100% {
+    filter: none;
+  }
+  35% {
+    filter: brightness(1.5) drop-shadow(0 0 10px currentColor);
+  }
+}
+
+.card--active.card--lit {
+  color: var(--good);
+}
+
+.card--negated.card--lit {
+  color: #9b6ab8;
+}
+
 .card__value {
   position: absolute;
   right: 2px;
@@ -556,6 +612,23 @@ button:disabled {
 .detail__name {
   margin: 0;
   font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.detail__note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.detail__note--active {
+  color: var(--good);
+  font-weight: 700;
+}
+
+.detail__note--negated {
+  color: #8e4b96;
   font-weight: 700;
 }
 
