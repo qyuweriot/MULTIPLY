@@ -156,10 +156,10 @@ describe('繁茂の強制（§9）', () => {
     expect(after.forcedZone).toBeNull()
   })
 
-  it('強制先が満杯なら強制は不発で、自由に置ける', () => {
-    const base = withHand(makeState({ p1z1: ['hyozan', 'heigen'] }), ['hanmo'])
+  it('強制先に置けないカードしか無ければ強制は不発で、自由に置ける', () => {
+    const base = withHand(makeState({ p1z1: ['hyozan'] }), ['hanmo'])
     const afterHanmo = applyMove(base, { cardUid: base.hands[0][0].uid, zone: 'p0z0' })
-    // p1z1 が満杯の状態で、そこを強制先にする
+    // p1z1 は氷山ゾーン。断崖（本来3）は置けないので強制は不発になる
     const p1: GameState = { ...withHand(afterHanmo, ['dangai'], 1), forcedZone: 'p1z1' }
 
     const zones = [...new Set(legalMoves(p1).map((m) => m.zone))].sort()
@@ -183,13 +183,10 @@ describe('設置制約の寿命', () => {
     expect(next.log[0].forced).toBe(true)
   })
 
-  it('強制先が満杯なら不発なので、どこに置いても forced にはならない', () => {
-    const base = beginTurn(createGame(1))
-    const s = {
-      ...base,
-      forcedZone: 'p1z1' as const,
-      zones: { ...base.zones, p1z1: { cards: base.zones.p1z1.cards, lockThreshold: 0 } },
-    }
+  it('強制先に置けないカードなら不発なので、どこに置いても forced にはならない', () => {
+    // p1z1 は氷山ゾーン。手札の断崖（本来3）はそこに置けないので強制は不発
+    const base = withHand(makeState({ p1z1: ['hyozan'] }), ['dangai'])
+    const s: GameState = { ...base, forcedZone: 'p1z1' }
     const next = applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p0z0' })
     expect(next.log[0].forced).toBeUndefined()
   })
@@ -238,14 +235,16 @@ describe('不正手の検出', () => {
     expect(() => applyMove(s, { cardUid: 9999, zone: 'p0z0' })).toThrow(/手札に/)
   })
 
-  it('満杯ゾーンへの設置は例外', () => {
-    let s = beginTurn(createGame(1))
-    // p0z0 を氷山で満杯にしてから、別のカードを置こうとする
-    s = {
-      ...s,
-      zones: { ...s.zones, p0z0: { cards: s.zones.p0z0.cards, lockThreshold: 0 } },
-    }
-    expect(() => applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p0z0' })).toThrow(/満杯/)
+  it('氷山ゾーンへ数値2以外のカードを置こうとすると例外', () => {
+    // 実際の氷山を置いたゾーンに、本来の数値が3の断崖を置こうとする
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['dangai'])
+    expect(() => applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p0z0' })).toThrow(/氷山/)
+  })
+
+  it('氷山ゾーンでも数値2のカードなら置ける', () => {
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['shippu'])
+    const next = applyMove(s, { cardUid: s.hands[0][0].uid, zone: 'p0z0' })
+    expect(next.zones.p0z0.cards.map((c) => c.defId)).toEqual(['hyozan', 'shippu'])
   })
 
   it('繁茂の強制を無視した設置は例外', () => {

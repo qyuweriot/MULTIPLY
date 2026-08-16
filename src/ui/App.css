@@ -239,8 +239,8 @@ button:disabled {
   background: var(--warn-soft);
 }
 
-.zone--full {
-  background: #f4f2ee;
+.zone--restricted {
+  background: #f2f7fc;
 }
 
 .zone__head {
@@ -290,15 +290,9 @@ button:disabled {
   color: #555;
 }
 
-.badge--lock,
-.badge--full {
+.badge--lock {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.badge--full {
-  border-color: var(--ink-soft);
-  color: var(--ink-soft);
 }
 
 .zone__cards {

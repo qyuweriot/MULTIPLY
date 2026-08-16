@@ -27,7 +27,7 @@ export function buildDeck(): CardInstance[] {
 function emptyZones(): Record<ZoneKey, ZoneState> {
   const zones = {} as Record<ZoneKey, ZoneState>
   for (const key of ALL_ZONES) {
-    zones[key] = { cards: [], lockThreshold: null }
+    zones[key] = { cards: [] }
   }
   return zones
 }

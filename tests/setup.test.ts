@@ -102,7 +102,6 @@ describe('createGame', () => {
     expect(s.phase).toBe('playing')
     for (const key of ALL_ZONES) {
       expect(s.zones[key].cards).toEqual([])
-      expect(s.zones[key].lockThreshold).toBeNull()
     }
   })
 

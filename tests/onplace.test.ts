@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { applyMove } from '../src/core/apply.ts'
 import type { GameState, Move } from '../src/core/types.ts'
 import { zoneTotal } from '../src/core/value.ts'
-import { isFull } from '../src/core/zone.ts'
-import { allCardUids, handIds, makeState, withHand, zoneIds } from './helpers.ts'
+import { canPlace, isRestricted } from '../src/core/zone.ts'
+import { allCardUids, handIds, makeCard, makeState, withHand, zoneIds } from './helpers.ts'
 
 /** current の手札の先頭カードを zone に置く手 */
 function play(state: GameState, zone: Move['zone'], extra: Partial<Move> = {}): GameState {
@@ -145,15 +145,17 @@ describe('渦潮：このゾーンのカードを1枚、別のゾーンへ移動
     expect(handIds(next, 1)).toEqual(['kagero'])
   })
 
-  it('氷山を動かすと移動元のロックが解除され、移動先がロックされる', () => {
+  it('氷山を動かすと移動元の制限が解除され、移動先が制限される', () => {
     const s = withHand(makeState({ p0z0: ['hyozan'] }), ['uzushio'])
     const targetUid = s.zones.p0z0.cards[0].uid
 
     const next = play(s, 'p0z0', { targetUid, moveTo: 'p1z1' })
 
-    expect(next.zones.p0z0.lockThreshold).toBeNull()
-    expect(next.zones.p1z1.lockThreshold).toBe(2)
-    expect(isFull(next.zones.p1z1)).toBe(false)
+    // 移動元には渦潮だけが残る（渦潮は数値2なので制限は無関係）
+    expect(isRestricted(next.zones.p0z0)).toBe(false)
+    expect(isRestricted(next.zones.p1z1)).toBe(true)
+    expect(canPlace(next.zones.p1z1, makeCard('dangai'))).toBe(false)
+    expect(canPlace(next.zones.p1z1, makeCard('shippu'))).toBe(true)
   })
 
   it('対象がいなければ不発（ログに fizzled が残る）', () => {
@@ -213,14 +215,16 @@ describe('刺創：このゾーンのカードを1枚、捨て札にする', () 
   })
 
   it('氷山を捨てるとそのゾーンの設置制限が解除される', () => {
-    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['shiso'])
-    expect(s.zones.p0z0.lockThreshold).toBe(2)
-    const targetUid = s.zones.p0z0.cards[0].uid
+    // 刺創は数値3なので、氷山ゾーンには置けない。氷山を別ゾーンに用意して壊す
+    const s = withHand(makeState({ p0z0: ['hyozan', 'shippu'] }), ['uzushio'])
+    expect(isRestricted(s.zones.p0z0)).toBe(true)
+    const hyozanUid = s.zones.p0z0.cards[0].uid
 
-    const next = play(s, 'p0z0', { targetUid })
+    // 渦潮（数値2）なら氷山ゾーンに置けるので、そこから氷山を追い出す
+    const next = play(s, 'p0z0', { targetUid: hyozanUid, moveTo: 'p1z1' })
 
-    expect(next.zones.p0z0.lockThreshold).toBeNull()
-    expect(isFull(next.zones.p0z0)).toBe(false)
+    expect(isRestricted(next.zones.p0z0)).toBe(false)
+    expect(canPlace(next.zones.p0z0, makeCard('dangai'))).toBe(true)
   })
 
   it('捨て札は平原でも山札に戻らない', () => {
@@ -293,10 +297,10 @@ describe('不正な対象指定は例外', () => {
     expect(() => play(s, 'p0z0', { targetUid, moveTo: 'p0z0' })).toThrow(/渦潮/)
   })
 
-  it('渦潮：満杯ゾーンを移動先にする', () => {
-    const s = withHand(makeState({ p0z0: ['dangai'], p0z1: ['hyozan', 'heigen'] }), ['uzushio'])
-    expect(isFull(s.zones.p0z1)).toBe(true)
-    const targetUid = s.zones.p0z0.cards[0].uid
+  it('渦潮：氷山ゾーンへ数値2以外のカードを送ろうとする', () => {
+    const s = withHand(makeState({ p0z0: ['dangai'], p0z1: ['hyozan'] }), ['uzushio'])
+    expect(isRestricted(s.zones.p0z1)).toBe(true)
+    const targetUid = s.zones.p0z0.cards[0].uid // 断崖（本来3）
     expect(() => play(s, 'p0z0', { targetUid, moveTo: 'p0z1' })).toThrow(/渦潮/)
   })
 

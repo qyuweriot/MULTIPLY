@@ -1,7 +1,7 @@
 import type { GameState, ZoneKey } from '../core/types.ts'
 import { ownerOf, slotOf } from '../core/types.ts'
 import { cardValues, zoneTotal } from '../core/value.ts'
-import { isFull } from '../core/zone.ts'
+import { HYOZAN_ALLOWED_VALUE, isRestricted } from '../core/zone.ts'
 import { PLAYER_LABELS, ZONE_LABELS } from '../labels.ts'
 import { Card } from './Card.tsx'
 import type { HoverHandler } from './Card.tsx'
@@ -44,8 +44,7 @@ export function Zone({
   const kagero = has('kagero')
   // 洞穴は合計を5に上書きするので、個別値は合計に反映されない
   const horaanaFixed = !kagero && has('horaana')
-  const full = isFull(zone)
-  const remaining = zone.lockThreshold === null ? null : zone.lockThreshold - zone.cards.length
+  const restricted = isRestricted(zone)
 
   const clickable = placeable || movable
   const classes = [
@@ -54,7 +53,7 @@ export function Zone({
     placeable ? 'zone--droppable' : '',
     dragOver ? 'zone--dragover' : '',
     forced ? 'zone--forced' : '',
-    full ? 'zone--full' : '',
+    restricted ? 'zone--restricted' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -75,10 +74,8 @@ export function Zone({
         {forced && <span className="badge badge--forced">繁茂：ここに置く</span>}
         {kagero && <span className="badge badge--kagero">陽炎：効果無効</span>}
         {horaanaFixed && <span className="badge badge--horaana">洞穴：合計5固定</span>}
-        {remaining !== null && (
-          <span className={`badge ${full ? 'badge--full' : 'badge--lock'}`}>
-            {full ? '氷山：満杯' : `氷山：あと${remaining}枚`}
-          </span>
+        {restricted && (
+          <span className="badge badge--lock">氷山：数値{HYOZAN_ALLOWED_VALUE}のみ</span>
         )}
       </div>
 

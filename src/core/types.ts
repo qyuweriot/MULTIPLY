@@ -54,8 +54,6 @@ export interface CardInstance {
 
 export interface ZoneState {
   cards: CardInstance[]
-  /** 氷山による設置上限。null = 制限なし */
-  lockThreshold: number | null
 }
 
 export interface LogEntry {

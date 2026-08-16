@@ -28,10 +28,10 @@ export function makeCard(defId: CardId): CardInstance {
 }
 
 export function emptyZone(): ZoneState {
-  return { cards: [], lockThreshold: null }
+  return { cards: [] }
 }
 
-/** onEnter を通してカードを積むので lockThreshold も実戦どおりに設定される */
+/** onEnter を通してカードを積む */
 export function zoneWith(...ids: CardId[]): ZoneState {
   return ids.reduce<ZoneState>((zone, id) => onEnter(zone, makeCard(id)), emptyZone())
 }

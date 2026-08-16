@@ -98,8 +98,8 @@ describe('渦潮', () => {
     expect(done).toEqual({ cardUid: s.hands[0][0].uid, zone: 'p0z0', targetUid, moveTo: 'p1z1' })
   })
 
-  it('移動先候補に元ゾーンと満杯ゾーンは出ない', () => {
-    const s = withHand(makeState({ p0z0: ['dangai'], p0z1: ['hyozan', 'heigen'] }), ['uzushio'])
+  it('移動先候補に元ゾーンと、そのカードを置けないゾーンは出ない', () => {
+    const s = withHand(makeState({ p0z0: ['dangai'], p0z1: ['hyozan'] }), ['uzushio'])
     const { moves, next } = pickCardAndZone(s, 'p0z0')
     if (isMove(next)) throw new Error('対象選択に進むはず')
 
@@ -108,17 +108,17 @@ describe('渦潮', () => {
 
     const dests = selectableMoveTos(moves, afterTarget)
     expect(dests.has('p0z0')).toBe(false) // 元ゾーン
-    expect(dests.has('p0z1')).toBe(false) // 満杯
+    expect(dests.has('p0z1')).toBe(false) // 氷山ゾーン（断崖は本来3なので置けない）
     expect(dests).toEqual(new Set(['p1z0', 'p1z1']))
   })
 
   it('移動先が1つしかなければ対象を選んだ時点で確定する', () => {
-    // 対象は2枚あるが、移動先は p1z1 しか空いていない
+    // 対象は2枚あるが、氷山により移動先は p1z1 しか残らない
     const s = withHand(
       makeState({
         p0z0: ['dangai', 'heigen'],
-        p0z1: ['hyozan', 'heigen'],
-        p1z0: ['hyozan', 'heigen'],
+        p0z1: ['hyozan'],
+        p1z0: ['hyozan'],
       }),
       ['uzushio'],
     )
@@ -134,8 +134,8 @@ describe('渦潮', () => {
     const s = withHand(
       makeState({
         p0z0: ['dangai'],
-        p0z1: ['hyozan', 'heigen'],
-        p1z0: ['hyozan', 'heigen'],
+        p0z1: ['hyozan'],
+        p1z0: ['hyozan'],
       }),
       ['uzushio'],
     )

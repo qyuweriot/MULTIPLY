@@ -93,9 +93,12 @@ describe('盤面の描画', () => {
     expect(renderBoard(makeState({ p0z0: ['kagero'] }))).toContain('陽炎：効果無効')
   })
 
-  it('氷山の残り枚数と満杯が出る', () => {
-    expect(renderBoard(makeState({ p0z0: ['hyozan'] }))).toContain('氷山：あと1枚')
-    expect(renderBoard(makeState({ p0z0: ['hyozan', 'heigen'] }))).toContain('氷山：満杯')
+  it('氷山ゾーンに設置制限のバッジが出る', () => {
+    const html = renderBoard(makeState({ p0z0: ['hyozan'] }))
+    expect(html).toContain('氷山：数値2のみ')
+    expect(html).toContain('zone--restricted')
+    // 氷山のないゾーンには出ない
+    expect(html.match(/氷山：数値2のみ/g)).toHaveLength(1)
   })
 
   it('繁茂の強制先が強調される', () => {

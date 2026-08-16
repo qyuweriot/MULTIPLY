@@ -5,7 +5,7 @@ import { shuffle } from './rng.ts'
 import { TOTAL_TURNS } from './setup.ts'
 import type { CardInstance, GameState, LogEntry, Move, PlayerId, ZoneKey } from './types.ts'
 import { ALL_ZONES, opponentOf } from './types.ts'
-import { isFull, onEnter, onLeave } from './zone.ts'
+import { canPlace, onEnter, onLeave } from './zone.ts'
 
 export type Chooser = (state: GameState, moves: Move[]) => Move
 
@@ -35,9 +35,9 @@ export function beginTurn(state: GameState): GameState {
   }
 }
 
-/** 渦潮の移動先候補（設置前の盤面を基準にする） */
-function uzushioDests(state: GameState, zone: ZoneKey): ZoneKey[] {
-  return ALL_ZONES.filter((z) => z !== zone && !isFull(state.zones[z]))
+/** 渦潮の移動先候補（設置前の盤面を基準に、移動するカードで判定する） */
+function uzushioDests(state: GameState, zone: ZoneKey, target: CardInstance): ZoneKey[] {
+  return ALL_ZONES.filter((z) => z !== zone && canPlace(state.zones[z], target))
 }
 
 /**
@@ -60,8 +60,8 @@ function validateTargets(state: GameState, move: Move, card: CardInstance): void
   }
 
   if (card.defId === 'uzushio') {
-    const dests = uzushioDests(state, move.zone)
-    if (others.length === 0 || dests.length === 0) {
+    const movable = others.some((t) => uzushioDests(state, move.zone, t).length > 0)
+    if (!movable) {
       if (move.targetUid !== undefined || move.moveTo !== undefined) {
         throw new Error('渦潮：不発のはずなのに対象または移動先が指定されている')
       }
@@ -70,10 +70,11 @@ function validateTargets(state: GameState, move: Move, card: CardInstance): void
     if (move.targetUid === undefined || move.moveTo === undefined) {
       throw new Error('渦潮：対象と移動先の両方を指定する必要がある')
     }
-    if (!others.some((c) => c.uid === move.targetUid)) {
+    const target = others.find((c) => c.uid === move.targetUid)
+    if (target === undefined) {
       throw new Error(`渦潮：uid=${move.targetUid} は ${move.zone} にない`)
     }
-    if (!dests.includes(move.moveTo)) {
+    if (!uzushioDests(state, move.zone, target).includes(move.moveTo)) {
       throw new Error(`渦潮：${move.moveTo} は移動先に選べない`)
     }
   }
@@ -173,8 +174,10 @@ export function applyMove(state: GameState, move: Move): GameState {
   const card = hand[index]
   const nextHand = [...hand.slice(0, index), ...hand.slice(index + 1)]
 
-  // 繁茂の強制が実際に効いているか（強制先が満杯なら不発＝自由に置ける）
-  const forceApplies = state.forcedZone !== null && !isFull(state.zones[state.forcedZone])
+  // 繁茂の強制が実際に効いているか
+  // （強制先にそのカードを置けないなら不発＝自由に置ける）
+  const forceApplies =
+    state.forcedZone !== null && canPlace(state.zones[state.forcedZone], card)
 
   // ── 設置 ──────────────────────────────────────────────────────────
   let placed: GameState
@@ -182,8 +185,8 @@ export function applyMove(state: GameState, move: Move): GameState {
     // 安全弁：設置せず手札を1枚捨ててターンを終える
     placed = { ...state, hands: setHand(state, player, nextHand), discard: [...state.discard, card] }
   } else {
-    if (isFull(state.zones[move.zone])) {
-      throw new Error(`${move.zone} は満杯なので設置できない`)
+    if (!canPlace(state.zones[move.zone], card)) {
+      throw new Error(`${move.zone} は氷山により ${card.defId} を設置できない`)
     }
     if (forceApplies && move.zone !== state.forcedZone) {
       throw new Error(`繁茂により ${state.forcedZone} に置かなければならない`)

@@ -16,10 +16,14 @@ describe('設置先の候補', () => {
     expect(zonesUsed(moves)).toEqual([...ALL_ZONES].sort())
   })
 
-  it('満杯ゾーンは設置先に含まれない', () => {
-    const s = withHand(makeState({ p0z0: ['hyozan', 'heigen'] }), ['dangai'])
-    const moves = legalMoves(s, null)
-    expect(zonesUsed(moves)).toEqual(['p0z1', 'p1z0', 'p1z1'])
+  it('氷山ゾーンは数値2以外のカードの設置先に含まれない', () => {
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['dangai'])
+    expect(zonesUsed(legalMoves(s, null))).toEqual(['p0z1', 'p1z0', 'p1z1'])
+  })
+
+  it('数値2のカードなら氷山ゾーンにも置ける', () => {
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['uzushio'])
+    expect(zonesUsed(legalMoves(s, null))).toEqual([...ALL_ZONES].sort())
   })
 
   it('相手のゾーンにも置ける（妨害札の前提）', () => {
@@ -36,10 +40,9 @@ describe('繁茂による強制', () => {
     expect(moves).toHaveLength(2)
   })
 
-  it('強制先が満杯なら不発になり、自由に置ける', () => {
-    const s = withHand(makeState({ p0z0: ['hyozan', 'heigen'] }), ['dangai'])
-    const moves = legalMoves(s, 'p0z0')
-    expect(zonesUsed(moves)).toEqual(['p0z1', 'p1z0', 'p1z1'])
+  it('強制先にそのカードを置けないなら不発になり、自由に置ける', () => {
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['dangai'])
+    expect(zonesUsed(legalMoves(s, 'p0z0'))).toEqual(['p0z1', 'p1z0', 'p1z1'])
   })
 
   it('force 省略時は state.forcedZone が使われる', () => {
@@ -100,13 +103,13 @@ describe('渦潮の対象と移動先', () => {
   })
 
   it('移動先が1つもなければ不発', () => {
-    // p0z0 以外の3ゾーンをすべて氷山で満杯にする
+    // 移動対象は平原（本来1）。他の3ゾーンはすべて氷山なので送り込めない
     const s = withHand(
       makeState({
         p0z0: ['heigen'],
-        p0z1: ['hyozan', 'heigen'],
-        p1z0: ['hyozan', 'heigen'],
-        p1z1: ['hyozan', 'heigen'],
+        p0z1: ['hyozan'],
+        p1z0: ['hyozan'],
+        p1z1: ['hyozan'],
       }),
       ['uzushio'],
     )
@@ -117,7 +120,8 @@ describe('渦潮の対象と移動先', () => {
 
 describe('安全弁', () => {
   it('置ける場所が1つもなければ discardOnly の手が手札枚数ぶん返る', () => {
-    const full: CardId[] = ['hyozan', 'heigen']
+    // ルール上は氷山3枚しかないので到達しないが、安全弁の動作自体を確かめる
+    const full: CardId[] = ['hyozan']
     const s = withHand(
       makeState({ p0z0: full, p0z1: full, p1z0: full, p1z1: full }),
       ['dangai', 'heigen'],

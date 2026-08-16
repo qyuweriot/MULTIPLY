@@ -38,12 +38,11 @@ export const CARD_DEFS: Record<CardId, CardDef> = {
     name: '氷山',
     reading: 'ひょうざん',
     baseValue: 2,
-    // 正典は「常在・優先度1」と記載。ただし氷山は数値変動ではなく設置制限なので
-    // value.ts の層判定には関与しない。
-    priority: 1,
+    // 氷山は数値変動ではなく設置制限なので、value.ts の層判定には関与しない。
+    priority: 0,
     hasOnPlace: false,
     copies: 3,
-    text: 'このゾーンに置けるカードは、あと1枚だけになる。',
+    text: 'このゾーンには、本来の数値が2のカードしか置くことができない。',
   },
   uzushio: {
     id: 'uzushio',

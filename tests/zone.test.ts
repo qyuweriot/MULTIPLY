@@ -1,165 +1,198 @@
-// 氷山によるゾーンロックの管理。期待値は docs/作業計画書.md §9 の表と
-// docs/カード効果テキスト.md の氷山【裁定】から起こしたもの。
+// 氷山による設置制限。期待値は docs/カード効果テキスト.md の氷山【裁定】から起こしたもの。
+//
+//   「このゾーンには、本来の数値が2のカードしか置くことができない。」
+//
+// 本来の数値が2なのは 氷山・渦潮・疾風（各3枚＝計9枚）。
 import { describe, expect, it } from 'vitest'
-import { canAccept, isFull, onEnter, onLeave } from '../src/core/zone.ts'
 import { legalMoves } from '../src/core/moves.ts'
-import type { GameState } from '../src/core/types.ts'
+import type { CardId, GameState } from '../src/core/types.ts'
 import { ALL_ZONES } from '../src/core/types.ts'
-import { emptyZone, makeCard, makeState, zoneWith } from './helpers.ts'
+import { canPlace, isRestricted, onEnter, onLeave } from '../src/core/zone.ts'
+import { emptyZone, makeCard, makeState, withHand, zoneWith } from './helpers.ts'
 
-describe('§9 ゾーンロック', () => {
-  it('#1 空ゾーンに氷山 → 1枚設置で満杯', () => {
-    const locked = onEnter(emptyZone(), makeCard('hyozan'))
-    expect(locked.lockThreshold).toBe(2)
-    expect(isFull(locked)).toBe(false) // あと1枚置ける
+/** 本来の数値ごとの代表カード */
+const VALUE_2: CardId[] = ['hyozan', 'uzushio', 'shippu']
+const NOT_2: CardId[] = ['shiso', 'kagero', 'dangai', 'soyoku', 'heigen', 'hanmo', 'gekko', 'horaana', 'ashikase']
 
-    const full = onEnter(locked, makeCard('heigen'))
-    expect(full.cards).toHaveLength(2)
-    expect(isFull(full)).toBe(true)
+describe('氷山のあるゾーン', () => {
+  it('本来の数値が2のカード（氷山・渦潮・疾風）は置ける', () => {
+    const zone = zoneWith('hyozan')
+    expect(isRestricted(zone)).toBe(true)
+    for (const id of VALUE_2) {
+      expect(canPlace(zone, makeCard(id)), id).toBe(true)
+    }
   })
 
-  it('#2 2枚あるゾーンに氷山 → 4枚で満杯', () => {
-    const locked = onEnter(zoneWith('heigen', 'hanmo'), makeCard('hyozan'))
-    expect(locked.cards).toHaveLength(3)
-    expect(locked.lockThreshold).toBe(4)
-    expect(isFull(locked)).toBe(false)
-
-    const full = onEnter(locked, makeCard('dangai'))
-    expect(full.cards).toHaveLength(4)
-    expect(isFull(full)).toBe(true)
+  it('本来の数値が2以外のカードは置けない', () => {
+    const zone = zoneWith('hyozan')
+    for (const id of NOT_2) {
+      expect(canPlace(zone, makeCard(id)), id).toBe(false)
+    }
   })
 
-  it('#3 氷山のみのゾーンに2枚目の氷山 → まだ1枚置ける（上書き）', () => {
+  it('氷山自身も数値2なので、同じゾーンに重ねられる', () => {
     const one = zoneWith('hyozan')
-    expect(one.lockThreshold).toBe(2)
-
     const two = onEnter(one, makeCard('hyozan'))
     expect(two.cards).toHaveLength(2)
-    expect(two.lockThreshold).toBe(3) // 「あと1枚」にリセットされる
-    expect(isFull(two)).toBe(false)
-
-    expect(isFull(onEnter(two, makeCard('heigen')))).toBe(true)
+    expect(canPlace(two, makeCard('hyozan'))).toBe(true)
   })
 
-  it('#4 満杯ゾーンの氷山を破壊 → 制限解除、再度置けるようになる', () => {
-    // 氷山を置いた時点で「あと1枚」→ もう1枚積んで満杯にする
-    const full = zoneWith('heigen', 'hyozan', 'dangai')
-    expect(full.lockThreshold).toBe(3)
-    expect(isFull(full)).toBe(true)
+  it('枚数の上限はない（数値2なら何枚でも積める）', () => {
+    let zone = zoneWith('hyozan')
+    for (let i = 0; i < 5; i++) zone = onEnter(zone, makeCard('shippu'))
+    expect(zone.cards).toHaveLength(6)
+    expect(canPlace(zone, makeCard('uzushio'))).toBe(true)
+  })
+})
 
-    const hyozan = full.cards.find((c) => c.defId === 'hyozan')!
-    const freed = onLeave(full, hyozan)
-    expect(freed.cards).toHaveLength(2)
-    expect(freed.lockThreshold).toBeNull()
-    expect(isFull(freed)).toBe(false)
-    expect(isFull(onEnter(freed, makeCard('dangai')))).toBe(false)
+describe('氷山のないゾーン', () => {
+  it('何でも置ける', () => {
+    const zone = zoneWith('dangai', 'heigen', 'gekko')
+    expect(isRestricted(zone)).toBe(false)
+    for (const id of [...VALUE_2, ...NOT_2]) {
+      expect(canPlace(zone, makeCard(id)), id).toBe(true)
+    }
   })
 
-  it('#5 氷山2枚のゾーンで1枚破壊 → 制限は維持される', () => {
+  it('空ゾーンにも何でも置ける', () => {
+    expect(canPlace(emptyZone(), makeCard('ashikase'))).toBe(true)
+  })
+})
+
+describe('★判定は本来の数値で行う', () => {
+  it('月光で0になっている断崖でも「本来3」なので置けない', () => {
+    // 月光があるゾーンでは断崖の現在値は0だが、判定に使うのは本来の数値
+    const state = makeState({ p0z0: ['gekko', 'dangai'], p0z1: ['hyozan'] })
+    const dangai = state.zones.p0z0.cards[1]
+    expect(canPlace(state.zones.p0z1, dangai)).toBe(false)
+  })
+
+  it('双翼が成立して3になっていても「本来1」なので置けない', () => {
+    const state = makeState({ p0z0: ['soyoku'], p0z1: ['soyoku', 'hyozan'] })
+    const soyoku = state.zones.p0z0.cards[0]
+    expect(canPlace(state.zones.p0z1, soyoku)).toBe(false)
+  })
+
+  it('月光で0になっている疾風は「本来2」なので置ける', () => {
+    const state = makeState({ p0z0: ['gekko', 'shippu'], p0z1: ['hyozan'] })
+    const shippu = state.zones.p0z0.cards[1]
+    expect(canPlace(state.zones.p0z1, shippu)).toBe(true)
+  })
+})
+
+describe('制限の解除', () => {
+  it('氷山がゾーンを離れると制限が解除される', () => {
+    const zone = zoneWith('shippu', 'hyozan')
+    expect(isRestricted(zone)).toBe(true)
+
+    const hyozan = zone.cards.find((c) => c.defId === 'hyozan')!
+    const freed = onLeave(zone, hyozan)
+    expect(isRestricted(freed)).toBe(false)
+    expect(canPlace(freed, makeCard('dangai'))).toBe(true)
+  })
+
+  it('氷山2枚のうち1枚が離れても制限は維持される', () => {
     const two = zoneWith('hyozan', 'hyozan')
-    expect(two.lockThreshold).toBe(3)
-
     const left = onLeave(two, two.cards[0])
     expect(left.cards).toHaveLength(1)
-    expect(left.lockThreshold).toBe(3) // 残った氷山の制限をそのまま維持
-    expect(isFull(left)).toBe(false)
+    expect(isRestricted(left)).toBe(true)
+    expect(canPlace(left, makeCard('dangai'))).toBe(false)
   })
 
-  it('#6 氷山3枚を3ゾーンに配置して全ロックしても、4つ目のゾーンは必ず空いている', () => {
-    const state = makeState({
-      p0z0: ['hyozan', 'heigen'], // 満杯
-      p0z1: ['hyozan', 'hanmo'], // 満杯
-      p1z0: ['hyozan', 'dangai'], // 満杯
-      p1z1: ['heigen', 'hanmo', 'dangai', 'shiso'], // 氷山がないので制限なし
-    })
-    const locked = ALL_ZONES.filter((z) => isFull(state.zones[z]))
-    expect(locked).toEqual(['p0z0', 'p0z1', 'p1z0'])
-    expect(locked.length).toBeLessThanOrEqual(3) // 氷山は3枚しかない
-    expect(isFull(state.zones.p1z1)).toBe(false)
-    expect(canAccept(state.zones.p1z1)).toBe(true)
-  })
-})
-
-describe('§9 ゾーンロック（合法手との連動）', () => {
-  it('#7 渦潮の移動先に満杯ゾーンは選べない', () => {
-    const state = makeState({
-      p0z0: ['heigen'], // 渦潮を置くゾーン。移動対象が1枚ある
-      p0z1: ['hyozan', 'hanmo'], // 満杯
-      p1z0: ['dangai'], // 空きあり
-      p1z1: [], // 空きあり
-    })
-    expect(isFull(state.zones.p0z1)).toBe(true)
-
-    const s: GameState = { ...state, hands: [[makeCard('uzushio')], state.hands[1]] }
-    const dests = legalMoves(s, 'p0z0').map((m) => m.moveTo)
-
-    expect(dests).not.toContain('p0z1') // 満杯なので移動先に出てこない
-    expect(dests).not.toContain('p0z0') // 元ゾーンも選べない
-    expect([...new Set(dests)].sort()).toEqual(['p1z0', 'p1z1'])
-  })
-})
-
-describe('ロック解除の条件', () => {
   it('氷山以外のカードが離れても制限は変わらない', () => {
-    const zone = zoneWith('hyozan', 'heigen')
-    const heigen = zone.cards.find((c) => c.defId === 'heigen')!
-    const after = onLeave(zone, heigen)
-    expect(after.lockThreshold).toBe(2)
-    expect(after.cards.map((c) => c.defId)).toEqual(['hyozan'])
-    expect(isFull(after)).toBe(false) // 1枚減ったので再び置ける
+    const zone = zoneWith('hyozan', 'shippu')
+    const shippu = zone.cards.find((c) => c.defId === 'shippu')!
+    const after = onLeave(zone, shippu)
+    expect(isRestricted(after)).toBe(true)
   })
 
-  it('制限のないゾーンから何枚抜いても lockThreshold は null のまま', () => {
-    const zone = zoneWith('heigen', 'hanmo')
-    expect(onLeave(zone, zone.cards[0]).lockThreshold).toBeNull()
-  })
-
-  it('渦潮で氷山が別ゾーンへ移動すると、移動元は解除・移動先はロックされる', () => {
-    const from = zoneWith('heigen', 'hyozan')
+  it('渦潮で氷山が別ゾーンへ移ると、制限も移る', () => {
+    const from = zoneWith('shippu', 'hyozan')
     const to = zoneWith('dangai')
     const hyozan = from.cards.find((c) => c.defId === 'hyozan')!
 
-    const fromAfter = onLeave(from, hyozan)
-    const toAfter = onEnter(to, hyozan)
+    expect(isRestricted(onLeave(from, hyozan))).toBe(false)
+    expect(isRestricted(onEnter(to, hyozan))).toBe(true)
+  })
+})
 
-    expect(fromAfter.lockThreshold).toBeNull()
-    expect(toAfter.lockThreshold).toBe(3)
-    expect(isFull(toAfter)).toBe(false)
+describe('置き場所は必ず残る', () => {
+  it('氷山3枚を3ゾーンに配置しても、4つ目のゾーンは自由なまま', () => {
+    const state = makeState({
+      p0z0: ['hyozan'],
+      p0z1: ['hyozan'],
+      p1z0: ['hyozan'],
+      p1z1: ['heigen', 'hanmo'],
+    })
+    const restricted = ALL_ZONES.filter((z) => isRestricted(state.zones[z]))
+    expect(restricted).toEqual(['p0z0', 'p0z1', 'p1z0'])
+    expect(restricted.length).toBeLessThanOrEqual(3) // 氷山は3枚しかない
+    expect(canPlace(state.zones.p1z1, makeCard('ashikase'))).toBe(true)
   })
 
-  it('ロック中のゾーンには必ず氷山がある', () => {
-    const zones = [
-      zoneWith('hyozan', 'heigen'),
-      zoneWith('hyozan', 'hyozan', 'heigen'),
-      zoneWith('heigen', 'hanmo', 'hyozan', 'dangai'),
-    ]
-    for (const zone of zones) {
-      if (isFull(zone)) {
-        expect(zone.cards.some((c) => c.defId === 'hyozan')).toBe(true)
-      }
-    }
+  it('3ゾーンが氷山でも、数値2以外のカードに必ず合法手がある', () => {
+    const base = makeState({ p0z0: ['hyozan'], p0z1: ['hyozan'], p1z0: ['hyozan'] })
+    const s = withHand(base, ['ashikase', 'gekko'])
+    const moves = legalMoves(s, null)
+    expect(moves.length).toBeGreaterThan(0)
+    expect(moves.every((m) => m.zone === 'p1z1')).toBe(true)
+    expect(moves.every((m) => m.discardOnly !== true)).toBe(true)
+  })
+})
+
+describe('合法手との連動', () => {
+  it('氷山ゾーンは数値2以外のカードの設置先に出てこない', () => {
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['dangai'])
+    const zones = [...new Set(legalMoves(s, null).map((m) => m.zone))].sort()
+    expect(zones).toEqual(['p0z1', 'p1z0', 'p1z1'])
+  })
+
+  it('数値2のカードなら氷山ゾーンにも置ける', () => {
+    const s = withHand(makeState({ p0z0: ['hyozan'] }), ['shippu'])
+    const zones = [...new Set(legalMoves(s, null).map((m) => m.zone))].sort()
+    expect(zones).toEqual([...ALL_ZONES].sort())
+  })
+
+  it('渦潮の移動先は「移動するカード」で判定される', () => {
+    // p0z0 に断崖(3)と疾風(2)。p0z1 は氷山ゾーン
+    const state = makeState({ p0z0: ['dangai', 'shippu'], p0z1: ['hyozan'] })
+    const s: GameState = { ...state, hands: [[makeCard('uzushio')], state.hands[1]] }
+    const moves = legalMoves(s, 'p0z0')
+
+    const dangaiUid = state.zones.p0z0.cards[0].uid
+    const shippuUid = state.zones.p0z0.cards[1].uid
+    const destsOf = (uid: number) =>
+      [...new Set(moves.filter((m) => m.targetUid === uid).map((m) => m.moveTo))].sort()
+
+    expect(destsOf(dangaiUid)).toEqual(['p1z0', 'p1z1']) // 断崖は氷山ゾーンへ送れない
+    expect(destsOf(shippuUid)).toEqual(['p0z1', 'p1z0', 'p1z1']) // 疾風は送れる
+  })
+
+  it('繁茂の強制先に置けないカードなら、強制は不発になる', () => {
+    const s = withHand(makeState({ p1z1: ['hyozan'] }), ['dangai'])
+    const zones = [...new Set(legalMoves(s, 'p1z1').map((m) => m.zone))].sort()
+    expect(zones).toEqual(['p0z0', 'p0z1', 'p1z0'])
   })
 })
 
 describe('純粋性', () => {
   it('onEnter は入力のゾーンを変更しない', () => {
-    const zone = zoneWith('heigen')
+    const zone = zoneWith('shippu')
     const before = JSON.stringify(zone)
     onEnter(zone, makeCard('hyozan'))
     expect(JSON.stringify(zone)).toBe(before)
   })
 
   it('onLeave は入力のゾーンを変更しない', () => {
-    const zone = zoneWith('heigen', 'hyozan')
+    const zone = zoneWith('shippu', 'hyozan')
     const before = JSON.stringify(zone)
     onLeave(zone, zone.cards[1])
     expect(JSON.stringify(zone)).toBe(before)
   })
 
   it('onLeave に存在しない uid を渡してもゾーンは変わらない', () => {
-    const zone = zoneWith('heigen', 'hyozan')
+    const zone = zoneWith('shippu', 'hyozan')
     const after = onLeave(zone, makeCard('dangai'))
     expect(after.cards.map((c) => c.uid)).toEqual(zone.cards.map((c) => c.uid))
-    expect(after.lockThreshold).toBe(zone.lockThreshold)
   })
 })
