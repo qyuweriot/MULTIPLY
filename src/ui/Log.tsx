@@ -1,27 +1,8 @@
 import { CARD_DEFS } from '../core/cards.ts'
-import type { GameState, LogEntry, ZoneKey } from '../core/types.ts'
-import { ownerOf, slotOf } from '../core/types.ts'
-import { PLAYER_LABELS, ZONE_LABELS } from '../labels.ts'
-
-function zoneName(key: ZoneKey) {
-  return `${PLAYER_LABELS[ownerOf(key)]}・${ZONE_LABELS[slotOf(key)]}`
-}
-
-/** ログ時点の盤面は再現しないので、カード名は uid から全体を走査して引く */
-function cardNameOf(state: GameState, uid: number): string {
-  const all = [
-    ...state.hands[0],
-    ...state.hands[1],
-    ...state.deck,
-    ...state.discard,
-    ...state.zones.p0z0.cards,
-    ...state.zones.p0z1.cards,
-    ...state.zones.p1z0.cards,
-    ...state.zones.p1z1.cards,
-  ]
-  const found = all.find((c) => c.uid === uid)
-  return found ? CARD_DEFS[found.defId].name : `#${uid}`
-}
+import type { GameState, LogEntry } from '../core/types.ts'
+import { PLAYER_LABELS, zoneName } from '../labels.ts'
+// ログ時点の盤面は再現しないので、カード名は uid から全体を走査して引く
+import { cardNameOf } from './effects.ts'
 
 function describe(state: GameState, e: LogEntry): string {
   if (e.discardOnly) return `${CARD_DEFS[e.cardId].name} を捨てた（置ける場所がない）`

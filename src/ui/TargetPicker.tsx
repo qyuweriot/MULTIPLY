@@ -1,7 +1,6 @@
 import { defOf } from '../core/cards.ts'
 import type { GameState } from '../core/types.ts'
-import { ownerOf, slotOf } from '../core/types.ts'
-import { PLAYER_LABELS, ZONE_LABELS } from '../labels.ts'
+import { zoneName } from '../labels.ts'
 import type { Selection } from './selection.ts'
 import { selectionPrompt } from './selection.ts'
 
@@ -10,11 +9,6 @@ export interface TargetPickerProps {
   selection: Selection
   onBack: () => void
   onReset: () => void
-}
-
-function zoneName(key: string) {
-  const k = key as Parameters<typeof ownerOf>[0]
-  return `${PLAYER_LABELS[ownerOf(k)]}・${ZONE_LABELS[slotOf(k)]}`
 }
 
 /** 多段選択（カード → ゾーン → 対象 → 移動先）の進行状況と取り消し */

@@ -1,4 +1,4 @@
-import type { GameState, ZoneKey } from '../core/types.ts'
+import type { CardId, GameState, ZoneKey } from '../core/types.ts'
 import { ownerOf, slotOf } from '../core/types.ts'
 import { cardValues, zoneTotal } from '../core/value.ts'
 import { HYOZAN_ALLOWED_VALUE, isRestricted } from '../core/zone.ts'
@@ -19,6 +19,8 @@ export interface ZoneProps {
   dragOver?: boolean
   /** 効果の対象に選べるカードの uid */
   targetUids?: Set<number>
+  /** このゾーンに重ねる演出。key を兼ねる seq とセットで渡す */
+  fx?: { cardId: CardId; seq: number } | null
   onSelectZone?: () => void
   onSelectTarget?: (uid: number) => void
   onHover?: HoverHandler
@@ -32,6 +34,7 @@ export function Zone({
   forced = false,
   dragOver = false,
   targetUids,
+  fx = null,
   onSelectZone,
   onSelectTarget,
   onHover,
@@ -61,6 +64,9 @@ export function Zone({
   // data-zone はドラッグ中の elementFromPoint でドロップ先を特定するために使う
   return (
     <section className={classes} data-zone={zoneKey}>
+      {fx !== null && (
+        <span className={`zone__fx zone__fx--${fx.cardId}`} key={fx.seq} aria-hidden="true" />
+      )}
       <header className="zone__head">
         <span className="zone__name">
           {PLAYER_LABELS[ownerOf(zoneKey)]}・{ZONE_LABELS[slotOf(zoneKey)]}
@@ -97,11 +103,16 @@ export function Zone({
         })}
       </div>
 
-      {clickable && (
-        <button type="button" className="zone__place" onClick={onSelectZone}>
-          {movable ? 'ここへ移動' : 'ここに置く'}
-        </button>
-      )}
+      {/* ボタンの有無で盤面の高さが変わると、着手のたびに無関係なカードまで
+          上下にずれ、FLIP がそれを移動として拾ってしまう。枠はつねに置いて
+          高さを固定し、中身だけを出し入れする */}
+      <div className="zone__action">
+        {clickable && (
+          <button type="button" className="zone__place" onClick={onSelectZone}>
+            {movable ? 'ここへ移動' : 'ここに置く'}
+          </button>
+        )}
+      </div>
     </section>
   )
 }

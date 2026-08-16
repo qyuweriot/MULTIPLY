@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import './App.css'
+import './effects.css'
 import { chooseMove, DIFFICULTIES } from '../ai/search.ts'
 import type { Difficulty } from '../ai/search.ts'
 import { visibleTo } from '../ai/view.ts'
@@ -14,10 +15,14 @@ import { Board } from './Board.tsx'
 import { Card } from './Card.tsx'
 import { CardDetail } from './CardDetail.tsx'
 import type { HoveredCard } from './CardDetail.tsx'
+import { EffectLayer } from './EffectLayer.tsx'
+import type { EffectEvent, MotionMode } from './effects.ts'
+import { BOARD_MS, CUTIN_MS, describeEffect } from './effects.ts'
 import { Hand } from './Hand.tsx'
 import { Log } from './Log.tsx'
 import { Result } from './Result.tsx'
 import { TargetPicker } from './TargetPicker.tsx'
+import { useBoardTransition } from './useBoardTransition.ts'
 import type { Pick, Selection } from './selection.ts'
 import {
   advanceSelection,
@@ -39,6 +44,9 @@ const CPU_DELAY_MS = 600
 /** CPU が担当するプレイヤー */
 const CPU_PLAYER: PlayerId = 1
 
+/** 演出の ON/OFF を次回起動まで覚えておく */
+const FX_KEY = 'multiply:fx'
+
 type Opponent = 'human' | Difficulty
 
 /** AI の乱数はゲーム本体の state.rng とは別系統にする */
@@ -53,6 +61,33 @@ function randomSeed(): number {
   return Math.floor(Date.now() % 1_000_000)
 }
 
+function initialFxOn(): boolean {
+  if (typeof window === 'undefined') return true
+  return window.localStorage.getItem(FX_KEY) !== 'off'
+}
+
+/** OS の「視差効果を減らす」設定。有効なら演出は一切動かさない */
+function initialReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+/**
+ * 演出の再生状態。
+ *
+ * seq は着手・巻き戻し・再開のたびに増える。useBoardTransition はこれが変わったときだけ
+ * カードを動かすので、「ホバーしただけで盤面が動く」ということが起きない。
+ */
+interface Playback {
+  seq: number
+  /** 巻き戻し・再開のときは null（カットインを出さずに位置だけ追従させる） */
+  event: EffectEvent | null
+  phase: 'idle' | 'cutin' | 'board'
+  mode: MotionMode
+}
+
+const IDLE: Playback = { seq: 0, event: null, phase: 'idle', mode: 'off' }
+
 export default function App() {
   const [seed, setSeed] = useState(randomSeed)
   const [history, setHistory] = useState<GameState[]>(() => [startGame(seed)])
@@ -64,6 +99,53 @@ export default function App() {
   const state = history[history.length - 1]
   const playing = state.phase === 'playing'
   const moves = useMemo(() => (playing ? legalMoves(state) : []), [state, playing])
+
+  // ── 演出 ────────────────────────────────────────────────────────
+  const [fxOn, setFxOn] = useState(initialFxOn)
+  const [reducedMotion] = useState(initialReducedMotion)
+  const [playback, setPlayback] = useState<Playback>(IDLE)
+  const ghostLayerRef = useRef<HTMLDivElement | null>(null)
+
+  const mode: MotionMode = reducedMotion ? 'off' : fxOn ? 'full' : 'quick'
+  const busy = playback.phase !== 'idle'
+  // 盤面・手札に重ねる固有モーションは、尺の長い「派手」のときだけ出す
+  // （effects.css の animation-delay がカットインの尺前提で書かれているため）
+  const boardFx = playback.mode === 'full' ? playback.event : null
+
+  const transition = useBoardTransition(
+    playback.seq,
+    playback.event,
+    ghostLayerRef,
+    playback.mode,
+  )
+
+  // カットイン（CUTIN_MS）→ 盤面演出（BOARD_MS）→ 待機、と1段ずつ進める
+  useEffect(() => {
+    if (playback.phase === 'idle') return
+    const ms = playback.phase === 'cutin' ? CUTIN_MS : BOARD_MS
+    const timer = setTimeout(() => {
+      setPlayback((p) =>
+        p.seq !== playback.seq ? p : { ...p, phase: p.phase === 'cutin' ? 'board' : 'idle' },
+      )
+    }, ms)
+    return () => clearTimeout(timer)
+  }, [playback.phase, playback.seq])
+
+  const skipFx = useCallback(() => {
+    transition.skip()
+    setPlayback((p) => ({ ...p, phase: 'idle' }))
+  }, [transition])
+
+  /** 巻き戻し・再開。カットインは出さず、カードの位置だけ追従させる */
+  const resetFx = useCallback(() => {
+    transition.skip()
+    setPlayback((p) => ({
+      seq: p.seq + 1,
+      event: null,
+      phase: 'idle',
+      mode: reducedMotion ? 'off' : 'quick',
+    }))
+  }, [transition, reducedMotion])
 
   // ── 詳細オーバーレイ ────────────────────────────────────────────
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -92,12 +174,23 @@ export default function App() {
   // ── 着手 ────────────────────────────────────────────────────────
   const commit = useCallback(
     (move: Move) => {
+      // 演出イベントは beginTurn より前に作る。ドロー後の盤面と比べると、
+      // 疾風の手札交換と次ターンのドローが混ざって差分が読めなくなる
       const after = applyMove(state, move)
+      setPlayback((p) => {
+        const event = describeEffect(state, after, p.seq + 1)
+        return {
+          seq: p.seq + 1,
+          event,
+          phase: mode === 'off' || event === null ? 'idle' : mode === 'full' ? 'cutin' : 'board',
+          mode,
+        }
+      })
       setHistory((h) => [...h, after.phase === 'playing' ? beginTurn(after) : after])
       setSelection(START)
       setHovered(null)
     },
-    [state],
+    [state, mode],
   )
 
   const applyPick = useCallback(
@@ -129,7 +222,8 @@ export default function App() {
   const cpuTurn = opponent !== 'human' && playing && state.current === CPU_PLAYER
 
   useEffect(() => {
-    if (!cpuTurn) return
+    // 演出の再生中は思考に入らない。カットインの裏で盤面が進むのを防ぐ
+    if (!cpuTurn || busy) return
     const difficulty = opponent as Difficulty
     const timer = setTimeout(() => {
       // 渡すのは PublicView だけ。CPU は山札の順序を見られない（§1-4）
@@ -138,7 +232,7 @@ export default function App() {
       commit(move)
     }, CPU_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [cpuTurn, opponent, state, commit])
+  }, [cpuTurn, busy, opponent, state, commit])
 
   // ── 履歴操作 ────────────────────────────────────────────────────
   function undo() {
@@ -153,6 +247,7 @@ export default function App() {
     setHistory(h)
     setSelection(START)
     setHovered(null)
+    resetFx()
   }
 
   function restart(newSeed: number) {
@@ -161,12 +256,19 @@ export default function App() {
     setHistory([startGame(newSeed)])
     setSelection(START)
     setHovered(null)
+    resetFx()
   }
 
   function changeOpponent(next: Opponent) {
     setOpponent(next)
     setSelection(START)
     setHovered(null)
+  }
+
+  function toggleFx(on: boolean) {
+    setFxOn(on)
+    if (typeof window !== 'undefined') window.localStorage.setItem(FX_KEY, on ? 'on' : 'off')
+    if (!on) skipFx()
   }
 
   const selectedUid = selection.step === 'card' ? null : selection.cardUid
@@ -176,6 +278,14 @@ export default function App() {
       ? selectableCards(moves)
       : new Set<number>()
   const dragOverZone: ZoneKey | null = drag?.over ?? null
+
+  /** 平原は使用者の手札、疾風は両者の手札に重ねる */
+  const handFx = (p: PlayerId) => {
+    if (boardFx === null) return null
+    const mine = boardFx.cardId === 'heigen' && boardFx.player === p
+    if (!mine && boardFx.cardId !== 'shippu') return null
+    return { cardId: boardFx.cardId, seq: boardFx.seq }
+  }
 
   return (
     <div className={`app ${drag !== null ? 'app--dragging' : ''}`}>
@@ -202,6 +312,10 @@ export default function App() {
             ))}
           </select>
         </label>
+        <label className="topbar__fx">
+          <input type="checkbox" checked={fxOn} onChange={(e) => toggleFx(e.target.checked)} />
+          演出
+        </label>
         <div className="topbar__actions">
           <button type="button" onClick={undo} disabled={history.length <= 1}>
             1手戻す
@@ -212,20 +326,23 @@ export default function App() {
         </div>
       </header>
 
-      {playing && (
+      {/* 選択ガイドと決着表示は同じ .picker の枠を共有する。別々のパネルにすると
+          決着した瞬間にその高さぶん盤面が下へずれ、FLIP がそれを移動として拾う */}
+      {playing ? (
         <TargetPicker
           state={state}
           selection={selection}
           onBack={() => setSelection(backSelection(selection))}
           onReset={() => setSelection(START)}
         />
+      ) : (
+        <Result state={state} onRestart={() => restart(randomSeed())} />
       )}
-
-      {!playing && <Result state={state} onRestart={() => restart(randomSeed())} />}
 
       <Hand
         state={state}
         player={1}
+        fx={handFx(1)}
         selectableUids={handSelectable(1)}
         selectedUid={state.current === 1 ? selectedUid : null}
         draggingUid={drag?.cardUid ?? null}
@@ -240,6 +357,7 @@ export default function App() {
         movableZones={selectableMoveTos(moves, selection)}
         targetUids={selectableTargets(moves, selection)}
         dragOverZone={dragOverZone}
+        effect={boardFx}
         onSelectZone={(zone) => pick({ zone })}
         onSelectMoveTo={(moveTo) => pick({ moveTo })}
         onSelectTarget={(targetUid) => pick({ targetUid })}
@@ -249,6 +367,7 @@ export default function App() {
       <Hand
         state={state}
         player={0}
+        fx={handFx(0)}
         selectableUids={handSelectable(0)}
         selectedUid={state.current === 0 ? selectedUid : null}
         draggingUid={drag?.cardUid ?? null}
@@ -269,6 +388,13 @@ export default function App() {
       {drag !== null && <DragGhost state={state} cardUid={drag.cardUid} ghostRef={ghostRef} />}
       {/* ドラッグ中は詳細を出さない。ref ではなく描画時の導出なのでリセット漏れが起きない */}
       <CardDetail hovered={drag !== null ? null : hovered} />
+
+      <EffectLayer
+        event={playback.event}
+        showCutIn={playback.phase === 'cutin'}
+        ghostLayerRef={ghostLayerRef}
+        onSkip={skipFx}
+      />
     </div>
   )
 }

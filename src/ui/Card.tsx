@@ -68,10 +68,14 @@ export function Card({
 
   // disabled にすると非操作カードでマウスイベントが飛ばなくなり、相手の手札や
   // 非対象カードでホバー詳細が出せない。aria-disabled で無効を伝えるだけにする。
+  // data-card-uid は useBoardTransition が FLIP の対象を特定するために使う。
+  // 手札にも盤面にも同じ属性を付けることで、手札 → ゾーン、ゾーン → 別ゾーン（渦潮）、
+  // 自分の手札 → 相手の手札（疾風）の移動が、同じ仕組みで1つのアニメーションになる。
   return (
     <button
       type="button"
       className={classes}
+      data-card-uid={card.uid}
       aria-disabled={!interactive}
       onClick={(e) => {
         // ドラッグ対応カードはポインタ経路で着手済み。ドロップ直後に発生する

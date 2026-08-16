@@ -1,4 +1,4 @@
-import type { GameState, PlayerId } from '../core/types.ts'
+import type { CardId, GameState, PlayerId } from '../core/types.ts'
 import { PLAYER_LABELS } from '../labels.ts'
 import { Card } from './Card.tsx'
 import type { HoverHandler, PointerHandlers } from './Card.tsx'
@@ -6,6 +6,8 @@ import type { HoverHandler, PointerHandlers } from './Card.tsx'
 export interface HandProps {
   state: GameState
   player: PlayerId
+  /** この手札に重ねる演出（平原・疾風）。key を兼ねる seq とセットで渡す */
+  fx?: { cardId: CardId; seq: number } | null
   /** 選べる手札の uid（手番でないプレイヤーは空集合） */
   selectableUids: Set<number>
   selectedUid: number | null
@@ -22,6 +24,7 @@ export interface HandProps {
 export function Hand({
   state,
   player,
+  fx = null,
   selectableUids,
   selectedUid,
   draggingUid,
@@ -37,6 +40,9 @@ export function Hand({
         <span>{PLAYER_LABELS[player]}の手札</span>
         {active && <span className="hand__turn">手番</span>}
       </header>
+      {fx !== null && (
+        <span className={`hand__fx hand__fx--${fx.cardId}`} key={fx.seq} aria-hidden="true" />
+      )}
       <div className="hand__cards">
         {state.hands[player].length === 0 && <p className="hand__empty">（なし）</p>}
         {state.hands[player].map((card) => {

@@ -1,7 +1,10 @@
+import { result } from '../core/score.ts'
 import type { GameState, PlayerId, ZoneKey } from '../core/types.ts'
 import { zonesOf } from '../core/types.ts'
 import { score, zoneTotal } from '../core/value.ts'
 import type { HoverHandler } from './Card.tsx'
+import type { EffectEvent } from './effects.ts'
+import { isEffectZone } from './effects.ts'
 import { Zone } from './Zone.tsx'
 
 export interface BoardProps {
@@ -10,24 +13,52 @@ export interface BoardProps {
   movableZones: Set<ZoneKey>
   targetUids: Set<number>
   dragOverZone: ZoneKey | null
+  /** 再生中の演出。関係するゾーンにだけモーションを重ねる */
+  effect?: EffectEvent | null
   onSelectZone: (zone: ZoneKey) => void
   onSelectMoveTo: (zone: ZoneKey) => void
   onSelectTarget: (uid: number) => void
   onHover: HoverHandler
 }
 
-/** 第一ゾーンと第二ゾーンの間に置く、掛け算の結果 */
+const VERDICT_LABELS = { win: '勝ち', lose: '負け', draw: '引き分け' } as const
+
+/** 決着していれば、そのプレイヤーから見た勝敗 */
+function verdictOf(state: GameState, player: PlayerId): keyof typeof VERDICT_LABELS | null {
+  if (state.phase !== 'finished') return null
+  // 勝敗の判定は core の result() に任せる。UI 側で組み直さない
+  const { winner } = result(state)
+  if (winner === null) return 'draw'
+  return winner === player ? 'win' : 'lose'
+}
+
+/**
+ * 第一ゾーンと第二ゾーンの間に置く、掛け算の結果。
+ * 決着後はここが勝敗の主役になる（上部の決着表示は1行だけに抑えてある）。
+ */
 function ScoreCell({ state, player }: { state: GameState; player: PlayerId }) {
   const [z0, z1] = zonesOf(player)
   const value = score(state, player)
   // 片方のゾーンが 0 だと積が 0 になる。事故が目で分かるように色を変える
   const zeroed = zoneTotal(state, z0) === 0 || zoneTotal(state, z1) === 0
+  const verdict = verdictOf(state, player)
+
+  const classes = [
+    'scorecell',
+    zeroed ? 'scorecell--zero' : '',
+    verdict !== null ? `scorecell--${verdict}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
-    <div className={`scorecell ${zeroed ? 'scorecell--zero' : ''}`}>
+    <div className={classes}>
       <span className="scorecell__op">×</span>
       <b className="scorecell__value">{value}</b>
       <span className="scorecell__label">得点</span>
+      {verdict !== null && (
+        <span className="scorecell__verdict">{VERDICT_LABELS[verdict]}</span>
+      )}
     </div>
   )
 }
@@ -43,6 +74,7 @@ export function Board({
   movableZones,
   targetUids,
   dragOverZone,
+  effect = null,
   onSelectZone,
   onSelectMoveTo,
   onSelectTarget,
@@ -55,9 +87,16 @@ export function Board({
       zoneKey={zoneKey}
       placeable={placeableZones.has(zoneKey)}
       movable={movableZones.has(zoneKey)}
-      forced={state.forcedZone === zoneKey}
+      // 決着後は「次の手番」が無いので、繁茂の強制も見せない
+      // （最終手が繁茂だと forcedZone は立ったまま決着する）
+      forced={state.phase === 'playing' && state.forcedZone === zoneKey}
       dragOver={dragOverZone === zoneKey}
       targetUids={targetUids}
+      fx={
+        effect !== null && isEffectZone(effect, zoneKey)
+          ? { cardId: effect.cardId, seq: effect.seq }
+          : null
+      }
       onSelectZone={() =>
         movableZones.has(zoneKey) ? onSelectMoveTo(zoneKey) : onSelectZone(zoneKey)
       }

@@ -1,0 +1,728 @@
+/* 演出（Phase 9）。App.css は盤面の静的な見た目、こちらは動きだけを持つ。
+ *
+ * 尺は src/ui/effects.ts の CUTIN_MS / BOARD_MS と揃えること。
+ * カードの移動・消滅は useBoardTransition.ts が Web Animations API で付けるので、
+ * ここに書くのは「カットイン」と「ゾーン・手札に重ねる固有モーション」の2つ。 */
+
+:root {
+  /* src/ui/effects.ts の CUTIN_MS / BOARD_MS と必ず揃えること */
+  --fx-cutin: 2000ms;
+  --fx-board: 1200ms;
+}
+
+/* 一発ものの動き（登場・退場・斬撃など）は上の変数を尺にしているので、
+ * ここを変えれば全部まとめて伸び縮みする。
+ * これに対し、陽炎のゆらぎ・氷山の霜・渦潮の回転・疾風の風のような
+ * 「地の質感」は infinite ループで、尺とは独立に速さを持たせてある。
+ * 質感まで同じ倍率で遅くすると、疾風が微風に、渦潮が停滞して見えてしまう。 */
+
+/* ── 退場ゴースト ─────────────────────────────── */
+.fx-ghosts {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+}
+
+.fx-ghost {
+  pointer-events: none;
+  z-index: 55;
+}
+
+/* 刺創で捨て札にされたカードは、赤い切れ目を残して消える */
+.fx-ghost--shiso {
+  box-shadow: 0 0 0 2px #d8352f, 0 0 18px 4px rgba(216, 53, 47, 0.55);
+}
+
+/* 平原で山札に戻る手札は、緑にほどけて消える */
+.fx-ghost--heigen {
+  box-shadow: 0 0 0 2px #3f9e5f, 0 0 16px 4px rgba(63, 158, 95, 0.45);
+}
+
+/* ── カットイン ───────────────────────────────── */
+.cutin {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(8, 10, 14, 0.84);
+  animation: fx-veil var(--fx-cutin) ease both;
+}
+
+@keyframes fx-veil {
+  0% {
+    opacity: 0;
+  }
+  12%,
+  74% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.cutin__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 0 1.5rem;
+  max-width: 900px;
+  animation: fx-body var(--fx-cutin) cubic-bezier(0.16, 0.9, 0.2, 1) both;
+}
+
+@keyframes fx-body {
+  0% {
+    opacity: 0;
+    transform: translateX(-40px) scale(0.92);
+  }
+  18%,
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(26px) scale(1.02);
+  }
+}
+
+.cutin__art {
+  display: block;
+  width: auto;
+  height: min(52vh, 380px);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+}
+
+.cutin__info {
+  color: #fff;
+  /* 背後のモーションと文字が混ざらないように、影を二段で敷く */
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 2px 16px rgba(0, 0, 0, 0.85);
+  max-width: 26rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid rgba(255, 255, 255, 0.45);
+}
+
+.cutin__who {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  opacity: 0.8;
+}
+
+.cutin__name {
+  margin: 0.15rem 0 0.5rem;
+  font-size: 2.6rem;
+  letter-spacing: 0.16em;
+  line-height: 1.15;
+}
+
+.cutin__reading {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.cutin__text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.cutin__tags {
+  margin: 0.6rem 0 0;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.cutin__tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+/* ── カードごとの固有モーション（カットイン背景）─────
+ * すべて .cutin__motif とその ::before / ::after だけで描く。画像は増やさない。 */
+.cutin__motif {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* 端へいくほど弱める。明るいグラデーションが画面の隅々まで広がると、
+     暗転を打ち消して盤面が透けて読めてしまうため。
+     ★ 透明まで落としてはいけない。繁茂の蔦・氷山の霜・断崖の裂け目・平原の草のように
+       「外周にしか絵が無い」演出があり、0 にするとそれらがまるごと消える
+       （実際、以前 transparent まで落としていて繁茂の演出が完全に消えていた） */
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 45%, rgba(0, 0, 0, 0.6) 100%);
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 45%, rgba(0, 0, 0, 0.6) 100%);
+}
+
+.cutin__motif::before,
+.cutin__motif::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+/* 回転する層は、画面をはみ出す正円にする。
+   画面と同じ大きさの長方形のまま回すと、角と辺が斜めの直線として画面を横切り、
+   渦が四角く切り取られて見える。
+   overflow: hidden が画面外を切るので、どの角度でも見えるのは円の内側だけになる */
+.cutin--uzushio .cutin__motif::before,
+.cutin--uzushio .cutin__motif::after,
+.cutin--hyozan .cutin__motif::after {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: 240vmax;
+  height: 240vmax;
+  margin: -120vmax 0 0 -120vmax;
+  border-radius: 50%;
+}
+
+/* 刺創：赤い斬撃線が斜めに2本走る。
+   芯に純白を置くと閃光が眩しくなりすぎるので、白は使わず帯も細くしてある */
+.cutin--shiso .cutin__motif::before,
+.cutin--shiso .cutin__motif::after {
+  background: linear-gradient(
+    108deg,
+    transparent 48.4%,
+    rgba(224, 76, 68, 0.5) 49.6%,
+    rgba(255, 226, 220, 0.8) 50%,
+    rgba(224, 76, 68, 0.5) 50.4%,
+    transparent 51.6%
+  );
+  animation: fx-slash var(--fx-cutin) cubic-bezier(0.1, 0.8, 0.2, 1) both;
+}
+
+.cutin--shiso .cutin__motif::after {
+  animation-delay: 390ms;
+  transform: scaleY(-1);
+}
+
+@keyframes fx-slash {
+  0% {
+    opacity: 0;
+    transform: translateX(-120%) scaleX(2.4);
+  }
+  /* ピークを 1 にすると閃光が眩しすぎる */
+  22% {
+    opacity: 0.7;
+  }
+  55%,
+  100% {
+    opacity: 0;
+    transform: translateX(120%) scaleX(2.4);
+  }
+}
+
+/* 陽炎：画面が陽炎状に揺らぐ */
+.cutin--kagero .cutin__motif::before {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(190, 120, 210, 0.22) 0 6px,
+    transparent 6px 18px
+  );
+  animation: fx-heathaze 3.3s ease-in-out infinite alternate;
+}
+
+.cutin--kagero .cutin__motif::after {
+  background: radial-gradient(ellipse at 50% 60%, rgba(200, 140, 220, 0.35), transparent 65%);
+  animation: fx-pulse var(--fx-cutin) ease both;
+}
+
+@keyframes fx-heathaze {
+  0% {
+    transform: skewX(-3deg) translateY(0);
+    filter: blur(1px);
+  }
+  100% {
+    transform: skewX(3deg) translateY(-8px);
+    filter: blur(3px);
+  }
+}
+
+/* 断崖：地面が割れて縦に裂ける */
+.cutin--dangai .cutin__motif::before {
+  background: linear-gradient(90deg, transparent 49.2%, rgba(0, 0, 0, 0.85) 50%, transparent 50.8%);
+  animation: fx-rift var(--fx-cutin) cubic-bezier(0.2, 0.9, 0.1, 1) both;
+}
+
+.cutin--dangai .cutin__motif::after {
+  background: linear-gradient(180deg, transparent 55%, rgba(90, 70, 55, 0.5) 100%);
+  animation: fx-fall var(--fx-cutin) ease-in both;
+}
+
+@keyframes fx-rift {
+  0% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  30% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1) scaleX(9);
+    opacity: 0;
+  }
+}
+
+@keyframes fx-fall {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(70px);
+    opacity: 0;
+  }
+}
+
+/* 氷山：白い霜が四隅から結晶状に広がる */
+.cutin--hyozan .cutin__motif::before {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(220, 244, 255, 0.24), transparent 28%),
+    radial-gradient(circle at 100% 0%, rgba(220, 244, 255, 0.24), transparent 28%),
+    radial-gradient(circle at 0% 100%, rgba(220, 244, 255, 0.24), transparent 28%),
+    radial-gradient(circle at 100% 100%, rgba(220, 244, 255, 0.24), transparent 28%);
+  animation: fx-frost var(--fx-cutin) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.cutin--hyozan .cutin__motif::after {
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(255, 255, 255, 0.12) 0deg 6deg,
+    transparent 6deg 30deg
+  );
+  animation: fx-spin 4.8s linear infinite;
+  opacity: 0.28;
+}
+
+@keyframes fx-frost {
+  0% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  40%,
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* 渦潮：同心円が回転しながら収束する */
+.cutin--uzushio .cutin__motif::before {
+  background: repeating-radial-gradient(
+    circle at 50% 50%,
+    rgba(120, 200, 245, 0.3) 0 4px,
+    transparent 4px 42px
+  );
+  animation: fx-swirl var(--fx-cutin) cubic-bezier(0.3, 0.7, 0.2, 1) both;
+}
+
+.cutin--uzushio .cutin__motif::after {
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(90, 180, 235, 0.26) 120deg,
+    transparent 240deg
+  );
+  animation: fx-spin 2.4s linear infinite;
+}
+
+@keyframes fx-swirl {
+  0% {
+    opacity: 0;
+    transform: scale(2.2) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.15) rotate(560deg);
+  }
+}
+
+@keyframes fx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 疾風：横方向の風のスジが高速で流れる */
+.cutin--shippu .cutin__motif::before,
+.cutin--shippu .cutin__motif::after {
+  background: repeating-linear-gradient(
+    92deg,
+    rgba(255, 255, 255, 0.32) 0 2px,
+    transparent 2px 46px
+  );
+  animation: fx-gust 760ms linear infinite;
+}
+
+.cutin--shippu .cutin__motif::after {
+  animation-duration: 1240ms;
+  animation-direction: reverse;
+  opacity: 0.5;
+  transform: translateY(30px);
+}
+
+@keyframes fx-gust {
+  0% {
+    background-position-x: 0;
+  }
+  100% {
+    background-position-x: 460px;
+  }
+}
+
+/* 双翼：左右から2枚の羽が閉じる */
+.cutin--soyoku .cutin__motif::before,
+.cutin--soyoku .cutin__motif::after {
+  width: 50%;
+  background: radial-gradient(ellipse at 100% 50%, rgba(255, 246, 200, 0.75), transparent 68%);
+  animation: fx-wing-l var(--fx-cutin) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.cutin--soyoku .cutin__motif::after {
+  left: 50%;
+  background: radial-gradient(ellipse at 0% 50%, rgba(255, 246, 200, 0.75), transparent 68%);
+  animation-name: fx-wing-r;
+}
+
+@keyframes fx-wing-l {
+  0% {
+    opacity: 0;
+    transform: translateX(-60%) rotate(-14deg);
+  }
+  40%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes fx-wing-r {
+  0% {
+    opacity: 0;
+    transform: translateX(60%) rotate(14deg);
+  }
+  40%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 平原：下から緑の草の波が広がる */
+.cutin--heigen .cutin__motif::before {
+  background: repeating-linear-gradient(
+    76deg,
+    rgba(120, 200, 120, 0.26) 0 3px,
+    transparent 3px 22px
+  );
+  animation: fx-grass var(--fx-cutin) ease-out both;
+}
+
+.cutin--heigen .cutin__motif::after {
+  background: radial-gradient(ellipse at 50% 110%, rgba(110, 205, 130, 0.34), transparent 62%);
+  animation: fx-pulse var(--fx-cutin) ease both;
+}
+
+@keyframes fx-grass {
+  0% {
+    opacity: 0;
+    transform: translateY(60%) scaleY(0.4);
+  }
+  35%,
+  68% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20%);
+  }
+}
+
+/* 繁茂：蔦が四隅から伸びて画面を縁取る */
+.cutin--hanmo .cutin__motif::before {
+  border: 14px solid rgba(92, 168, 92, 0.85);
+  border-image: repeating-linear-gradient(
+      45deg,
+      rgba(92, 168, 92, 0.95) 0 12px,
+      rgba(52, 116, 60, 0.95) 12px 24px
+    )
+    14;
+  animation: fx-vine var(--fx-cutin) cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.cutin--hanmo .cutin__motif::after {
+  background: radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(40, 90, 45, 0.5) 100%);
+  animation: fx-pulse var(--fx-cutin) ease both;
+}
+
+@keyframes fx-vine {
+  0% {
+    opacity: 0;
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+  }
+  45%,
+  72% {
+    opacity: 1;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+  100% {
+    opacity: 0;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+}
+
+/* 洞穴：中央から暗い円が広がって周囲を飲み込む */
+.cutin--horaana .cutin__motif::before {
+  background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.92) 40%, transparent 62%);
+  animation: fx-maw var(--fx-cutin) cubic-bezier(0.3, 0.7, 0.2, 1) both;
+}
+
+.cutin--horaana .cutin__motif::after {
+  background: radial-gradient(circle at 50% 50%, transparent 46%, rgba(120, 110, 95, 0.35) 58%);
+  animation: fx-maw var(--fx-cutin) cubic-bezier(0.3, 0.7, 0.2, 1) both;
+  animation-delay: 270ms;
+}
+
+@keyframes fx-maw {
+  0% {
+    opacity: 0;
+    transform: scale(0.05);
+  }
+  45%,
+  70% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* 月光：上から青白い光条が差し込む */
+.cutin--gekko .cutin__motif::before {
+  background: repeating-linear-gradient(
+    100deg,
+    rgba(200, 225, 255, 0.16) 0 10px,
+    transparent 10px 54px
+  );
+  animation: fx-moonbeam var(--fx-cutin) ease-out both;
+}
+
+.cutin--gekko .cutin__motif::after {
+  background: radial-gradient(circle at 50% -10%, rgba(210, 232, 255, 0.24), transparent 58%);
+  animation: fx-pulse var(--fx-cutin) ease both;
+}
+
+@keyframes fx-moonbeam {
+  0% {
+    opacity: 0;
+    transform: translateY(-70%);
+  }
+  36%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(24%);
+  }
+}
+
+/* 足枷：鎖状の帯が左右から締まる */
+.cutin--ashikase .cutin__motif::before,
+.cutin--ashikase .cutin__motif::after {
+  top: 38%;
+  bottom: 38%;
+  width: 52%;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(150, 150, 158, 0.42) 0 14px,
+    rgba(70, 70, 78, 0.42) 14px 28px
+  );
+  animation: fx-chain-l var(--fx-cutin) cubic-bezier(0.3, 0.9, 0.2, 1) both;
+}
+
+.cutin--ashikase .cutin__motif::after {
+  left: 48%;
+  animation-name: fx-chain-r;
+}
+
+@keyframes fx-chain-l {
+  0% {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  45%,
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes fx-chain-r {
+  0% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  45%,
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes fx-pulse {
+  0% {
+    opacity: 0;
+  }
+  40%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── 盤面に重ねる固有モーション ─────────────────
+ * カットインが引けたあと（delay）に走らせて、実際の盤面の動きと重ねる。 */
+.zone__fx,
+.hand__fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.zone,
+.hand {
+  position: relative;
+}
+
+/* 渦潮：移動元・移動先に渦のリングが残る */
+.zone__fx--uzushio::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-radial-gradient(
+    circle at 50% 50%,
+    rgba(90, 180, 235, 0.45) 0 3px,
+    transparent 3px 26px
+  );
+  animation: fx-swirl var(--fx-board) ease-out var(--fx-cutin) both;
+}
+
+/* 刺創：ゾーンに赤い切れ目が走る */
+.zone__fx--shiso::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    112deg,
+    transparent 45%,
+    rgba(216, 53, 47, 0.9) 49.5%,
+    #fff 50%,
+    rgba(216, 53, 47, 0.9) 50.5%,
+    transparent 55%
+  );
+  animation: fx-slash var(--fx-board) ease-out var(--fx-cutin) both;
+}
+
+/* 繁茂：ゾーンの縁を蔦が回る */
+.zone__fx--hanmo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(92, 168, 92, 0.9);
+  border-radius: inherit;
+  animation: fx-vine var(--fx-board) ease-out var(--fx-cutin) both;
+}
+
+/* 平原：手札の下から草が伸びる */
+.hand__fx--heigen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    76deg,
+    rgba(120, 200, 120, 0.35) 0 3px,
+    transparent 3px 20px
+  );
+  animation: fx-grass var(--fx-board) ease-out var(--fx-cutin) both;
+}
+
+/* 疾風：手札を風が横切る */
+.hand__fx--shippu::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    92deg,
+    rgba(120, 170, 220, 0.45) 0 2px,
+    transparent 2px 32px
+  );
+  animation:
+    fx-gust 600ms linear var(--fx-cutin) 3,
+    fx-pulse var(--fx-board) ease var(--fx-cutin) both;
+}
+
+/* ── 動きを減らす設定 ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .cutin,
+  .cutin__body,
+  .cutin__motif::before,
+  .cutin__motif::after,
+  .zone__fx::before,
+  .hand__fx::before {
+    animation: none !important;
+  }
+
+  .cutin {
+    display: none;
+  }
+}

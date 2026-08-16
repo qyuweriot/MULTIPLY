@@ -87,6 +87,15 @@ body {
   color: var(--ink);
 }
 
+.topbar__fx {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
 .topbar__actions {
   margin-left: auto;
   display: flex;
@@ -133,6 +142,18 @@ button:disabled {
   background: var(--accent-soft);
 }
 
+/* 決着表示。選択ガイドと同じ枠・同じ高さで、色だけ変える */
+.picker--result {
+  border-style: solid;
+  border-color: var(--good);
+  background: #eef8f2;
+}
+
+.picker--result .picker__prompt {
+  color: var(--good);
+  font-size: 1rem;
+}
+
 .picker__prompt {
   margin: 0;
   font-weight: 700;
@@ -169,6 +190,9 @@ button:disabled {
   font-size: 0.85rem;
   color: var(--ink-soft);
   margin-bottom: 0.35rem;
+  /* 「手番」バッジ（実測 23.3px）は素の文字（21.8px）より背が高い。バッジは毎ターン
+     上下の手札を行き来するので、確保しないと盤面が 1.6px ずつ上下に揺れる */
+  min-height: 1.5rem;
 }
 
 .hand__turn {
@@ -207,6 +231,9 @@ button:disabled {
   align-items: stretch;
 }
 
+/* 高さの下限は .zone__cards が持つ（カード1枚ぶんを確保している）ので、
+   ここで min-height は持たない。二重に下限を置くと、どちらが効いているのか
+   分からなくなる */
 .zone {
   display: flex;
   flex-direction: column;
@@ -215,7 +242,6 @@ button:disabled {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  min-height: 10rem;
 }
 
 .zone--clickable {
@@ -223,9 +249,11 @@ button:disabled {
   background: var(--accent-soft);
 }
 
+/* border-width を変えると box-sizing: border-box のぶん内側が 1px 縮み、
+   ゾーン内のカードが斜めにずれる。枠の太さは変えず、内側の線で強調する */
 .zone--droppable {
   border-style: dashed;
-  border-width: 2px;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .zone--dragover {
@@ -262,7 +290,10 @@ button:disabled {
   display: flex;
   gap: 0.3rem;
   flex-wrap: wrap;
-  min-height: 1.1rem;
+  /* .badge の実効高（実測 22.4px）より必ず大きくすること。
+     小さいとバッジが出るたびにゾーンが伸びる。1.4rem では余裕が 0.01px しかなく
+     フォントの描画差で溢れうるので、1.5rem まで取ってある */
+  min-height: 1.5rem;
 }
 
 .badge {
@@ -301,10 +332,24 @@ button:disabled {
   flex-wrap: wrap;
   flex: 1;
   align-content: flex-start;
+  /* 空のゾーンに最初の1枚が入った瞬間にゾーンが伸びると、その行より下がまるごと
+     押し下げられ、FLIP が移動として拾ってしまう（実測で 67.5px ずれていた）。
+     カード1枚ぶんの高さをつねに確保しておく。
+     カードの高さ ＝ 幅 × 画像比（744 : 1039）。--card-board が変われば追従する */
+  min-height: calc(var(--card-board) * 1039 / 744);
+}
+
+/* 「ここに置く」の置き場。ボタンが無いときも高さを保ち、盤面を伸縮させない。
+   min-height は .zone__place の実効高（0.85rem × line-height 1.6 ＋ 上下 padding
+   0.3rem ＋ 枠 2px ≒ 2.1rem）より必ず大きくしておくこと。小さくすると枠のほうが
+   伸びてしまい、カードがずれる不具合が戻る。 */
+.zone__action {
+  display: flex;
+  align-items: flex-start;
+  min-height: 2.2rem;
 }
 
 .zone__place {
-  align-self: flex-start;
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 700;
@@ -340,6 +385,39 @@ button:disabled {
 
 .scorecell--zero .scorecell__value {
   color: var(--warn);
+}
+
+/* ── 決着時の勝敗（得点セルが主役）───────────── */
+.scorecell__verdict {
+  margin-top: 0.25rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.scorecell--win .scorecell__verdict {
+  border-color: var(--good);
+  background: var(--good);
+  color: #fff;
+}
+
+/* 勝者の得点は緑で大きく。0点決着の警告色より、勝敗のほうを優先して見せる */
+.scorecell--win .scorecell__value,
+.scorecell--win.scorecell--zero .scorecell__value {
+  color: var(--good);
+  font-size: 2.4rem;
+}
+
+.scorecell--lose {
+  opacity: 0.6;
+}
+
+.scorecell--draw .scorecell__verdict {
+  border-color: var(--ink-soft);
 }
 
 /* ── カード ───────────────────────────────────── */
@@ -482,8 +560,7 @@ button:disabled {
 }
 
 /* ── ログ ─────────────────────────────────────── */
-.log,
-.result {
+.log {
   padding: 0.6rem 0.75rem;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -532,50 +609,6 @@ button:disabled {
   margin: 0;
   font-size: 0.8rem;
   color: var(--ink-soft);
-}
-
-/* ── 結果 ─────────────────────────────────────── */
-.result {
-  border-color: var(--good);
-  box-shadow: 0 0 0 3px #e8f6ee;
-}
-
-.result__title {
-  margin: 0 0 0.5rem;
-  font-size: 1.1rem;
-  color: var(--good);
-}
-
-.result__table {
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.result__table th,
-.result__table td {
-  padding: 0.15rem 0.4rem;
-  text-align: right;
-}
-
-.result__table thead th {
-  font-size: 0.7rem;
-  color: var(--ink-soft);
-  font-weight: 400;
-}
-
-.result__table tbody th {
-  text-align: left;
-}
-
-.result__row--win b {
-  color: var(--good);
-}
-
-.result__restart {
-  margin-top: 0.6rem;
-  border-color: var(--good);
-  color: var(--good);
-  font-weight: 700;
 }
 
 .seedline {

@@ -4,11 +4,14 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { beginTurn } from '../src/core/apply.ts'
+import { CARD_DEFS } from '../src/core/cards.ts'
 import { createGame } from '../src/core/setup.ts'
 import type { GameState } from '../src/core/types.ts'
 import App from '../src/ui/App.tsx'
 import { Board } from '../src/ui/Board.tsx'
 import { CardDetail } from '../src/ui/CardDetail.tsx'
+import { EffectLayer } from '../src/ui/EffectLayer.tsx'
+import type { EffectEvent } from '../src/ui/effects.ts'
 import { Hand } from '../src/ui/Hand.tsx'
 import { Result } from '../src/ui/Result.tsx'
 import { makeState, withHand } from './helpers.ts'
@@ -21,7 +24,7 @@ const noHandlers = () => ({
   onPointerCancel: noop,
 })
 
-function renderBoard(state: GameState) {
+function renderBoard(state: GameState, effect: EffectEvent | null = null) {
   return renderToStaticMarkup(
     <Board
       state={state}
@@ -29,11 +32,34 @@ function renderBoard(state: GameState) {
       movableZones={new Set()}
       targetUids={new Set()}
       dragOverZone={null}
+      effect={effect}
       onSelectZone={noop}
       onSelectMoveTo={noop}
       onSelectTarget={noop}
       onHover={noop}
     />,
+  )
+}
+
+/** 演出イベントの雛形。必要な項目だけ上書きして使う */
+function event(over: Partial<EffectEvent> = {}): EffectEvent {
+  return {
+    seq: 1,
+    cardId: 'uzushio',
+    cardUid: 0,
+    player: 0,
+    zone: 'p0z0',
+    fizzled: false,
+    forced: false,
+    discardOnly: false,
+    removed: [],
+    ...over,
+  }
+}
+
+function renderCutIn(e: EffectEvent) {
+  return renderToStaticMarkup(
+    <EffectLayer event={e} showCutIn ghostLayerRef={{ current: null }} onSkip={noop} />,
   )
 }
 
@@ -108,6 +134,13 @@ describe('盤面の描画', () => {
     expect(html).toContain('繁茂：ここに置く')
   })
 
+  it('決着後は繁茂の強制を出さない（最終手が繁茂だと forcedZone が立ったまま残る）', () => {
+    const base = makeState({})
+    const html = renderBoard({ ...base, forcedZone: 'p1z1', phase: 'finished' })
+    expect(html).not.toContain('zone--forced')
+    expect(html).not.toContain('繁茂：ここに置く')
+  })
+
   it('ドロップ先を特定するための data-zone が全ゾーンに付く', () => {
     const html = renderBoard(makeState({}))
     for (const z of ['p0z0', 'p0z1', 'p1z0', 'p1z1']) {
@@ -132,6 +165,38 @@ describe('盤面の描画', () => {
     )
     expect(html.match(/zone--droppable/g)).toHaveLength(2)
     expect(html.match(/zone--dragover/g)).toHaveLength(1)
+  })
+})
+
+describe('「ここに置く」の領域確保', () => {
+  // ボタンの出入りで盤面の高さが変わると、着手のたびに無関係なカードまで上下にずれ、
+  // FLIP がそれを移動として拾ってしまう（実測で 41px ずれていた）。
+  // 枠がつねに在ることを固定して、この不具合が黙って戻らないようにする。
+  it('ボタンが出ていなくても、置き場の枠は全ゾーンにある', () => {
+    const html = renderBoard(makeState({ p0z0: ['dangai'] }))
+    expect(html.match(/zone__action/g)).toHaveLength(4)
+    expect(html).not.toContain('zone__place')
+  })
+
+  it('選べるゾーンでは、枠の中にボタンが入る（枠の外に出ると高さが変わる）', () => {
+    const html = renderToStaticMarkup(
+      <Board
+        state={makeState({})}
+        placeableZones={new Set(['p0z0'])}
+        movableZones={new Set(['p1z1'])}
+        targetUids={new Set()}
+        dragOverZone={null}
+        onSelectZone={noop}
+        onSelectMoveTo={noop}
+        onSelectTarget={noop}
+        onHover={noop}
+      />,
+    )
+    expect(html.match(/zone__action/g)).toHaveLength(4)
+    expect(html.match(/zone__place/g)).toHaveLength(2)
+    expect(html).toContain('<div class="zone__action"><button type="button" class="zone__place"')
+    expect(html).toContain('ここに置く')
+    expect(html).toContain('ここへ移動')
   })
 })
 
@@ -242,11 +307,94 @@ describe('アプリ全体', () => {
     expect(html).not.toContain('思考中')
   })
 
+  it('演出の ON/OFF を切り替えられる。初期状態ではカットインを出さない', () => {
+    const html = renderToStaticMarkup(<App />)
+    expect(html).toContain('演出')
+    expect(html).toContain('type="checkbox"')
+    // 着手前なので再生するものが無い。ゴースト層だけが用意されている
+    expect(html).not.toContain('class="cutin')
+    expect(html).toContain('fx-ghosts')
+  })
+
   it('サイドパネルと山札・捨て札の表示が無い', () => {
     const html = renderToStaticMarkup(<App />)
     expect(html).not.toContain('app__side')
     expect(html).not.toContain('山札')
     expect(html).not.toContain('捨て札')
+  })
+})
+
+describe('発動カットイン', () => {
+  it('カード名・読み・効果文・置いた場所が出る', () => {
+    const html = renderCutIn(event({ cardId: 'uzushio', zone: 'p1z1', player: 0 }))
+    expect(html).toContain('渦潮')
+    expect(html).toContain('うずしお')
+    expect(html).toContain('このゾーンにあるカードを1枚選び、別のゾーンへ移動させる。')
+    expect(html).toContain('プレイヤー1')
+    expect(html).toContain('プレイヤー2・第二') // 置いた先は相手のゾーン
+  })
+
+  it('カードごとに固有のクラスが付く（背景モーションの出し分け）', () => {
+    for (const id of ['heigen', 'shippu', 'shiso', 'hanmo', 'kagero', 'gekko'] as const) {
+      expect(renderCutIn(event({ cardId: id }))).toContain(`cutin--${id}`)
+    }
+  })
+
+  it('不発と強制が明示される', () => {
+    const html = renderCutIn(event({ cardId: 'shiso', fizzled: true, forced: true }))
+    expect(html).toContain('不発')
+    expect(html).toContain('繁茂により強制')
+  })
+
+  it('通った手には不発の表示が出ない', () => {
+    expect(renderCutIn(event())).not.toContain('不発')
+  })
+
+  it('置けずに捨てた手は、ゾーン名も効果文も出さない', () => {
+    const html = renderCutIn(event({ cardId: 'dangai', discardOnly: true }))
+    expect(html).toContain('置ける場所がないため捨札')
+    expect(html).not.toContain('第一')
+    expect(html).not.toContain(CARD_DEFS.dangai.text)
+  })
+
+  it('カットインを出さない局面では描画されない（ゴースト層だけ残る）', () => {
+    const html = renderToStaticMarkup(
+      <EffectLayer
+        event={event()}
+        showCutIn={false}
+        ghostLayerRef={{ current: null }}
+        onSkip={noop}
+      />,
+    )
+    expect(html).toContain('fx-ghosts')
+    expect(html).not.toContain('cutin')
+  })
+})
+
+describe('盤面に重ねる演出', () => {
+  it('渦潮は移動元と移動先の両方が光る', () => {
+    const html = renderBoard(
+      makeState({ p0z0: ['heigen'] }),
+      event({ cardId: 'uzushio', zone: 'p0z0', moved: { card: { uid: 1, defId: 'heigen' }, from: 'p0z0', to: 'p1z1' } }),
+    )
+    expect(html.match(/zone__fx--uzushio/g)).toHaveLength(2)
+  })
+
+  it('通常のカードは置いたゾーンだけが光る', () => {
+    const html = renderBoard(makeState({}), event({ cardId: 'hanmo', zone: 'p1z0' }))
+    expect(html.match(/zone__fx--hanmo/g)).toHaveLength(1)
+  })
+
+  it('演出がなければ何も重ならない', () => {
+    expect(renderBoard(makeState({ p0z0: ['dangai'] }))).not.toContain('zone__fx')
+  })
+
+  it('カードに data-card-uid が付く（移動アニメーションの対象特定に使う）', () => {
+    const s = makeState({ p0z0: ['dangai'] })
+    expect(renderBoard(s)).toContain(`data-card-uid="${s.zones.p0z0.cards[0].uid}"`)
+    // 手札にも付く（手札 → ゾーンの移動をつなげるため）
+    const hand = withHand(makeState({}), ['kagero'])
+    expect(renderHand(hand, 0, new Set())).toContain(`data-card-uid="${hand.hands[0][0].uid}"`)
   })
 })
 
@@ -262,8 +410,8 @@ describe('結果画面', () => {
     const html = renderToStaticMarkup(<Result state={finished} onRestart={noop} />)
 
     expect(html).toContain('プレイヤー1 の勝ち')
-    expect(html).toContain('<b>12</b>')
-    expect(html).toContain('<b>1</b>')
+    expect(html).toContain('プレイヤー1 12')
+    expect(html).toContain('プレイヤー2 1')
     expect(html).toContain('もう一度遊ぶ')
   })
 
@@ -273,5 +421,72 @@ describe('結果画面', () => {
       <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
     )
     expect(html).toContain('引き分け')
+  })
+
+  // 決着した瞬間に盤面が下へずれる不具合（実測 128px）を防ぐ。別のパネルにすると戻る。
+  it('選択ガイドと同じ .picker の枠を使い、1行に収まっている', () => {
+    const base = makeState({ p0z0: ['dangai'], p0z1: ['heigen'] })
+    const html = renderToStaticMarkup(
+      <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
+    )
+    expect(html).toContain('class="picker picker--result"')
+    // かつての見出し＋表の3段組みには戻さない
+    expect(html).not.toContain('<table')
+    expect(html).not.toContain('<h2')
+  })
+
+  it('進行中と決着後で、上部の枠が同じ .picker ひとつだけになる', () => {
+    const playing = renderToStaticMarkup(<App />)
+    // 枠そのものだけを数える（picker__prompt などの子要素は除く）
+    const frame = /class="picker(?: picker--\w+)?"/g
+    expect(playing.match(frame)).toHaveLength(1)
+
+    const base = makeState({ p0z0: ['dangai'], p0z1: ['heigen'] })
+    const done = renderToStaticMarkup(
+      <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
+    )
+    expect(done.match(frame)).toHaveLength(1)
+  })
+})
+
+describe('得点セルの勝敗表示', () => {
+  const board = makeState({
+    p0z0: ['kagero'], // 3
+    p0z1: ['dangai', 'heigen'], // 4 → プレイヤー1 は 12
+    p1z0: ['heigen'], // 1
+    p1z1: ['heigen'], // 1 → プレイヤー2 は 1
+  })
+
+  it('進行中は勝敗を出さない', () => {
+    const html = renderBoard(board)
+    expect(html).not.toContain('scorecell__verdict')
+    expect(html).not.toContain('勝ち')
+  })
+
+  it('決着後は勝者に「勝ち」、敗者に「負け」が出る', () => {
+    const html = renderBoard({ ...board, phase: 'finished' })
+    expect(html.match(/scorecell__verdict/g)).toHaveLength(2)
+    expect(html).toContain('scorecell--win')
+    expect(html).toContain('scorecell--lose')
+    expect(html).toContain('勝ち')
+    expect(html).toContain('負け')
+
+    // 「勝ち」が付くのは得点が高いほうのセル。
+    // セル単位に切り分けて照合しないと、隣のセルの数字を拾ってしまい
+    // 勝敗を取り違えても素通りする
+    const cells = html.split('<div class="scorecell').slice(1)
+    expect(cells).toHaveLength(2)
+    expect(cells.find((c) => c.includes('scorecell--win'))).toContain('scorecell__value">12<')
+    expect(cells.find((c) => c.includes('scorecell--lose'))).toContain('scorecell__value">1<')
+  })
+
+  it('同点なら両方に「引き分け」が出る', () => {
+    const even = makeState({
+      p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['heigen'], p1z1: ['heigen'],
+    })
+    const html = renderBoard({ ...even, phase: 'finished' })
+    expect(html.match(/引き分け/g)).toHaveLength(2)
+    expect(html).not.toContain('scorecell--win')
+    expect(html).not.toContain('scorecell--lose')
   })
 })

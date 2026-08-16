@@ -1,49 +1,33 @@
 import { result } from '../core/score.ts'
-import type { GameState, PlayerId } from '../core/types.ts'
-import { zonesOf } from '../core/types.ts'
-import { zoneTotal } from '../core/value.ts'
-import { PLAYER_LABELS, ZONE_LABELS } from '../labels.ts'
+import type { GameState } from '../core/types.ts'
+import { PLAYER_LABELS } from '../labels.ts'
 
+/**
+ * 決着表示。
+ *
+ * ★ 選択ガイド（TargetPicker）と同じ .picker の枠を使い、1行に収める。
+ *   別の形のパネルにすると、決着した瞬間にその高さぶん盤面全体が下へずれ、
+ *   FLIP がそれを移動として拾ってしまう（実測で 128px ずれていた）。
+ *
+ * ゾーンごとの内訳は盤面（各ゾーンの「合計」と、ゾーン間の得点セル）に出ているので、
+ * ここで表を組み直す必要はない。勝敗そのものは得点セルが大きく示す。
+ */
 export function Result({ state, onRestart }: { state: GameState; onRestart: () => void }) {
   const { scores, winner } = result(state)
 
   return (
-    <div className="result">
-      <h2 className="result__title">
+    <div className="picker picker--result">
+      <p className="picker__prompt">
         {winner === null ? '引き分け' : `${PLAYER_LABELS[winner]} の勝ち`}
-      </h2>
-      <table className="result__table">
-        <thead>
-          <tr>
-            <th></th>
-            <th>{ZONE_LABELS.z0}</th>
-            <th></th>
-            <th>{ZONE_LABELS.z1}</th>
-            <th></th>
-            <th>得点</th>
-          </tr>
-        </thead>
-        <tbody>
-          {([0, 1] as PlayerId[]).map((p) => {
-            const [z0, z1] = zonesOf(p)
-            return (
-              <tr key={p} className={winner === p ? 'result__row--win' : ''}>
-                <th>{PLAYER_LABELS[p]}</th>
-                <td>{zoneTotal(state, z0)}</td>
-                <td>×</td>
-                <td>{zoneTotal(state, z1)}</td>
-                <td>=</td>
-                <td>
-                  <b>{scores[p]}</b>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <button type="button" className="result__restart" onClick={onRestart}>
-        もう一度遊ぶ
-      </button>
+      </p>
+      <p className="picker__steps">
+        {PLAYER_LABELS[0]} {scores[0]} ／ {PLAYER_LABELS[1]} {scores[1]}
+      </p>
+      <div className="picker__actions">
+        <button type="button" onClick={onRestart}>
+          もう一度遊ぶ
+        </button>
+      </div>
     </div>
   )
 }
