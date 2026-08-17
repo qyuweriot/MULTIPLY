@@ -1,14 +1,27 @@
 // バランス調整用の指標集計（作業計画書 §11）。
 // CLI と混ぜると検証できないので、集計は純関数としてここに切り出してある。
 import { CARD_ORDER } from '../src/core/cards.ts'
-import type { CardId, LogEntry, PlayerId } from '../src/core/types.ts'
+import type { CardId, GameState, LogEntry, PlayerId } from '../src/core/types.ts'
 import { ownerOf } from '../src/core/types.ts'
+import { score } from '../src/core/value.ts'
+
+/**
+ * いま決着したとしたら勝つ側。
+ *
+ * 引き分けはなく同点は先攻の勝ちなので、並んでいるときも先攻を勝つ側とみなす
+ * （正典 §1）。ここを「並び＝リードなし」にすると、最終ターン逆転率が実際の
+ * ルールとズレる。run.ts ではなくここに置いてあるのはテストを当てるため。
+ */
+export function leaderOf(state: GameState): PlayerId {
+  return score(state, 1) > score(state, 0) ? 1 : 0
+}
 
 export interface GameRecord {
   scores: [number, number]
-  winner: PlayerId | null
-  /** ターン14の着手「直前」のリード者。最終ターン逆転率に使う */
-  leaderBeforeLastMove: PlayerId | null
+  /** 引き分けはない。同点なら先攻の勝ち */
+  winner: PlayerId
+  /** ターン14の着手「直前」に、そこで決着したとしたら勝っていた側。最終ターン逆転率に使う */
+  leaderBeforeLastMove: PlayerId
   log: LogEntry[]
   /** 終局時に空だったゾーン数（0〜4） */
   emptyZones: number
@@ -34,15 +47,14 @@ export interface Metrics {
   games: number
   /** 先攻（プレイヤー0）の勝率 */
   firstPlayerWinRate: number
-  drawRate: number
+  /** 両者の得点が並んだ割合。同点は先攻の勝ちなので勝敗には出ない診断値 */
+  tieRate: number
   /** どちらかの最終得点が0だった試合の割合 */
   zeroScoreRate: number
   averageScore: number
   maxScore: number
   /** 最終手で勝敗が決した割合（直前のリード者と最終勝者が違う） */
   lastTurnSwingRate: number
-  /** そのうち、明確にリードが入れ替わった割合（両者とも非null） */
-  clearReversalRate: number
   cards: CardStat[]
   /** 診断用 */
   avgEmptyZones: number
@@ -59,12 +71,11 @@ export interface Metrics {
 const empty: Metrics = {
   games: 0,
   firstPlayerWinRate: 0,
-  drawRate: 0,
+  tieRate: 0,
   zeroScoreRate: 0,
   averageScore: 0,
   maxScore: 0,
   lastTurnSwingRate: 0,
-  clearReversalRate: 0,
   cards: [],
   avgEmptyZones: 0,
   avgCrushedZones: 0,
@@ -80,12 +91,11 @@ export function summarize(records: readonly GameRecord[]): Metrics {
 
   const n = records.length
   let firstWins = 0
-  let draws = 0
+  let ties = 0
   let zeroScore = 0
   let scoreSum = 0
   let maxScore = 0
   let swings = 0
-  let reversals = 0
   let emptyZones = 0
   let crushedZones = 0
   const crushedBy = { gekko: 0, ashikase: 0, other: 0 }
@@ -104,7 +114,8 @@ export function summarize(records: readonly GameRecord[]): Metrics {
 
   for (const r of records) {
     if (r.winner === 0) firstWins++
-    if (r.winner === null) draws++
+    // 同点は勝敗に出ないので、得点そのものを見て数える
+    if (r.scores[0] === r.scores[1]) ties++
     if (r.scores[0] === 0 || r.scores[1] === 0) zeroScore++
     scoreSum += r.scores[0] + r.scores[1]
     maxScore = Math.max(maxScore, r.scores[0], r.scores[1])
@@ -116,13 +127,6 @@ export function summarize(records: readonly GameRecord[]): Metrics {
     } else {
       stableGames++
       if (r.winner === 0) stableFirstWins++
-    }
-    if (
-      r.leaderBeforeLastMove !== null &&
-      r.winner !== null &&
-      r.leaderBeforeLastMove !== r.winner
-    ) {
-      reversals++
     }
 
     emptyZones += r.emptyZones
@@ -169,12 +173,11 @@ export function summarize(records: readonly GameRecord[]): Metrics {
   return {
     games: n,
     firstPlayerWinRate: firstWins / n,
-    drawRate: draws / n,
+    tieRate: ties / n,
     zeroScoreRate: zeroScore / n,
     averageScore: scoreSum / (n * 2),
     maxScore,
     lastTurnSwingRate: swings / n,
-    clearReversalRate: reversals / n,
     cards,
     avgEmptyZones: emptyZones / n,
     avgCrushedZones: crushedZones / n,

@@ -1,8 +1,9 @@
 // シミュレータの指標集計（作業計画書 §11）。
 import { describe, expect, it } from 'vitest'
 import type { GameRecord } from '../sim/metrics.ts'
-import { summarize } from '../sim/metrics.ts'
+import { leaderOf, summarize } from '../sim/metrics.ts'
 import type { CardId, LogEntry, PlayerId, ZoneKey } from '../src/core/types.ts'
+import { makeState } from './helpers.ts'
 
 let turn = 0
 function entry(player: PlayerId, cardId: CardId, zone: ZoneKey, extra: Partial<LogEntry> = {}): LogEntry {
@@ -23,16 +24,26 @@ function record(over: Partial<GameRecord> = {}): GameRecord {
 }
 
 describe('勝敗まわり', () => {
-  it('先攻勝率・引き分け率を数える', () => {
+  it('先攻勝率を数える', () => {
     const m = summarize([
       record({ winner: 0 }),
       record({ winner: 0 }),
       record({ winner: 1 }),
-      record({ winner: null }),
+      record({ winner: 1 }),
     ])
     expect(m.games).toBe(4)
     expect(m.firstPlayerWinRate).toBe(0.5)
-    expect(m.drawRate).toBe(0.25)
+  })
+
+  // 同点は先攻の勝ちになるので、勝敗からは数えられない。得点そのものを見る
+  it('同点率は得点が並んだ試合を数える（勝敗ではなく得点から）', () => {
+    const m = summarize([
+      record({ scores: [12, 12], winner: 0 }),
+      record({ scores: [12, 12], winner: 0 }),
+      record({ scores: [12, 5], winner: 0 }),
+      record({ scores: [5, 12], winner: 1 }),
+    ])
+    expect(m.tieRate).toBe(0.5)
   })
 
   it('0点決着率はどちらかの得点が0なら数える', () => {
@@ -52,29 +63,38 @@ describe('勝敗まわり', () => {
   })
 })
 
+describe('leaderOf：いま決着したとしたら勝つ側', () => {
+  it('得点が上の側', () => {
+    // p0 は 3×3=9、p1 は 1×1=1
+    const s = makeState({ p0z0: ['dangai'], p0z1: ['dangai'], p1z0: ['heigen'], p1z1: ['heigen'] })
+    expect(leaderOf(s)).toBe(0)
+    expect(leaderOf(makeState({ p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['dangai'], p1z1: ['dangai'] }))).toBe(1)
+  })
+
+  // ここを「並び＝リードなし」にすると、最終ターン逆転率が実際のルールとズレる
+  it('並んでいたら先攻。同点は先攻の勝ちだから', () => {
+    const s = makeState({ p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['heigen'], p1z1: ['heigen'] })
+    expect(leaderOf(s)).toBe(0)
+    expect(leaderOf(makeState({}))).toBe(0) // 0 対 0
+  })
+})
+
 describe('最終ターン逆転率', () => {
   it('直前のリード者がそのまま勝てば逆転ではない', () => {
-    const m = summarize([record({ leaderBeforeLastMove: 0, winner: 0 })])
+    expect(summarize([record({ leaderBeforeLastMove: 0, winner: 0 })]).lastTurnSwingRate).toBe(0)
+    expect(summarize([record({ leaderBeforeLastMove: 1, winner: 1 })]).lastTurnSwingRate).toBe(0)
+  })
+
+  it('リードが入れ替わったら逆転', () => {
+    expect(summarize([record({ leaderBeforeLastMove: 0, winner: 1 })]).lastTurnSwingRate).toBe(1)
+    expect(summarize([record({ leaderBeforeLastMove: 1, winner: 0 })]).lastTurnSwingRate).toBe(1)
+  })
+
+  // 同点は先攻の勝ちなので、並んでいる状態も「先攻がリード」として扱う。
+  // 後攻が最終手で並びに持ち込んでも、それは逆転ではない
+  it('並んだ状態からの決着は、リード者が変わったかどうかだけで決まる', () => {
+    const m = summarize([record({ scores: [12, 12], leaderBeforeLastMove: 0, winner: 0 })])
     expect(m.lastTurnSwingRate).toBe(0)
-    expect(m.clearReversalRate).toBe(0)
-  })
-
-  it('リードが入れ替わったら逆転（明確な逆転にも数える）', () => {
-    const m = summarize([record({ leaderBeforeLastMove: 0, winner: 1 })])
-    expect(m.lastTurnSwingRate).toBe(1)
-    expect(m.clearReversalRate).toBe(1)
-  })
-
-  it('並んだ状態から決着した場合は「最終手で勝敗が決した」に数えるが、明確な逆転ではない', () => {
-    const m = summarize([record({ leaderBeforeLastMove: null, winner: 1 })])
-    expect(m.lastTurnSwingRate).toBe(1)
-    expect(m.clearReversalRate).toBe(0)
-  })
-
-  it('リードしていたのに引き分けに持ち込まれた場合も勝敗が変わったと数える', () => {
-    const m = summarize([record({ leaderBeforeLastMove: 0, winner: null })])
-    expect(m.lastTurnSwingRate).toBe(1)
-    expect(m.clearReversalRate).toBe(0)
   })
 
   it('割合として集計される', () => {

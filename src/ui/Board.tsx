@@ -27,15 +27,22 @@ export interface BoardProps {
   onHover: HoverHandler
 }
 
-const VERDICT_LABELS = { win: '勝ち', lose: '負け', draw: '引き分け' } as const
+// 引き分けはない（同点は先攻の勝ち）。ただし「並んだうえで勝った／負けた」ことは
+// 分かるようにする。得点だけ見ると同じ数字なので、理由が伝わらない
+const VERDICT_LABELS = {
+  win: '勝ち',
+  lose: '負け',
+  tiedWin: '同点勝ち',
+  tiedLose: '同点負け',
+} as const
 
 /** 決着していれば、そのプレイヤーから見た勝敗 */
 function verdictOf(state: GameState, player: PlayerId): keyof typeof VERDICT_LABELS | null {
   if (state.phase !== 'finished') return null
   // 勝敗の判定は core の result() に任せる。UI 側で組み直さない
-  const { winner } = result(state)
-  if (winner === null) return 'draw'
-  return winner === player ? 'win' : 'lose'
+  const { winner, tied } = result(state)
+  const won = winner === player
+  return tied ? (won ? 'tiedWin' : 'tiedLose') : won ? 'win' : 'lose'
 }
 
 /**

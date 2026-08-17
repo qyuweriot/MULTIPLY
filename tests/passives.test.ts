@@ -148,7 +148,7 @@ describe('断崖・足枷（枚数の自己条件）', () => {
     const four: CardId[] = ['ashikase', 'heigen', 'heigen', 'hanmo']
     const s4 = makeState({ p0z0: four })
     expect(statusOfCard(s4, 'p0z0', 'ashikase').status.state).toBe('dormant')
-    expect(statusOfCard(s4, 'p0z0', 'ashikase').value).toBe(-2)
+    expect(statusOfCard(s4, 'p0z0', 'ashikase').value).toBe(-3)
 
     const s5 = makeState({ p0z0: [...four, 'hanmo'] })
     expect(statusOfCard(s5, 'p0z0', 'ashikase').status.state).toBe('active')

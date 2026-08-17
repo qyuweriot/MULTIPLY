@@ -118,7 +118,7 @@ export const CARD_DEFS: Record<CardId, CardDef> = {
     id: 'ashikase',
     name: '足枷',
     reading: 'あしかせ',
-    baseValue: -2,
+    baseValue: -3,
     priority: 0,
     hasOnPlace: false,
     copies: 1,

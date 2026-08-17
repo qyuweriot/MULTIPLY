@@ -112,16 +112,19 @@ describe('勝敗判定', () => {
     expect(r.scores).toHaveLength(2)
     expect(Number.isFinite(r.scores[0])).toBe(true)
     expect(Number.isFinite(r.scores[1])).toBe(true)
-    if (r.scores[0] === r.scores[1]) {
-      expect(r.winner).toBeNull()
-    } else {
-      expect(r.winner).toBe(r.scores[0] > r.scores[1] ? 0 : 1)
-    }
+    // 引き分けはない。同点なら先攻の勝ち
+    expect(r.winner).toBe(r.scores[0] >= r.scores[1] ? 0 : 1)
+    expect(r.tied).toBe(r.scores[0] === r.scores[1])
   })
 
-  it('引き分けは winner が null', () => {
-    const s = createGame(0)
-    expect(result(s).winner).toBeNull() // 開始直後は 0 対 0
+  it('同点なら先攻の勝ちになり、tied が立つ', () => {
+    const s = createGame(0) // 開始直後は 0 対 0
+    expect(result(s)).toMatchObject({ scores: [0, 0], winner: 0, tied: true })
+  })
+
+  it('後攻が上回っていれば後攻の勝ち（タイブレークは同点のときだけ）', () => {
+    const s = makeState({ p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['dangai'], p1z1: ['dangai'] })
+    expect(result(s)).toMatchObject({ scores: [1, 9], winner: 1, tied: false })
   })
 })
 

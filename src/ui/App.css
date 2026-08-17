@@ -410,7 +410,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.scorecell--win .scorecell__verdict {
+.scorecell--win .scorecell__verdict,
+.scorecell--tiedWin .scorecell__verdict {
   border-color: var(--good);
   background: var(--good);
   color: #fff;
@@ -418,17 +419,22 @@ button:disabled {
 
 /* 勝者の得点は緑で大きく。0点決着の警告色より、勝敗のほうを優先して見せる */
 .scorecell--win .scorecell__value,
-.scorecell--win.scorecell--zero .scorecell__value {
+.scorecell--win.scorecell--zero .scorecell__value,
+.scorecell--tiedWin .scorecell__value,
+.scorecell--tiedWin.scorecell--zero .scorecell__value {
   color: var(--good);
   font-size: 2.4rem;
 }
 
-.scorecell--lose {
+.scorecell--lose,
+.scorecell--tiedLose {
   opacity: 0.6;
 }
 
-.scorecell--draw .scorecell__verdict {
-  border-color: var(--ink-soft);
+/* 同点決着は得点が並ぶので、塗りを弱めて「僅差ではなく同点」だと分かるようにする */
+.scorecell--tiedWin .scorecell__verdict {
+  background: transparent;
+  color: var(--good);
 }
 
 /* ── カード ───────────────────────────────────── */

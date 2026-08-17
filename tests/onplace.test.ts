@@ -39,8 +39,10 @@ describe('平原：手札をすべて山札に戻してシャッフルし、そ�
     expect(play(s, 'p0z0').hands[0]).toHaveLength(2)
   })
 
+  // 「両者が引き直す」案を実測したが、相手の悪い手札まで直してしまい逆効果だった
+  // （作業計画書 §13 Phase 7）。相手の手札に触れないことをここで固定する
   it('相手の手札には触れない', () => {
-    const s = withHand(makeState({}), ['heigen', 'dangai'])
+    const s = withHand(withHand(makeState({}), ['heigen', 'dangai'], 0), ['soyoku', 'hanmo'], 1)
     expect(play(s, 'p0z0').hands[1]).toEqual(s.hands[1])
   })
 
@@ -130,6 +132,7 @@ describe('渦潮：このゾーンのカードを1枚、別のゾーンへ移動
 
     expect(zoneIds(next, 'p0z1')).toEqual(['heigen'])
     expect(handIds(next, 0)).toEqual(['dangai']) // 引き直していない
+    expect(next.hands[1]).toEqual(s.hands[1]) // 相手の手札も動かない
     expect(next.deck).toEqual(s.deck)
     expect(next.rng).toBe(s.rng)
   })

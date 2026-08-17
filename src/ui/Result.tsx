@@ -13,12 +13,14 @@ import { PLAYER_LABELS } from '../labels.ts'
  * ここで表を組み直す必要はない。勝敗そのものは得点セルが大きく示す。
  */
 export function Result({ state, onRestart }: { state: GameState; onRestart: () => void }) {
-  const { scores, winner } = result(state)
+  const { scores, winner, tied } = result(state)
 
   return (
     <div className="picker picker--result">
       <p className="picker__prompt">
-        {winner === null ? '引き分け' : `${PLAYER_LABELS[winner]} の勝ち`}
+        {tied
+          ? `同点 — ${PLAYER_LABELS[winner]} の勝ち（先攻）`
+          : `${PLAYER_LABELS[winner]} の勝ち`}
       </p>
       <p className="picker__steps">
         {PLAYER_LABELS[0]} {scores[0]} ／ {PLAYER_LABELS[1]} {scores[1]}

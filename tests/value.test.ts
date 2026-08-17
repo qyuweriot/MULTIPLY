@@ -91,10 +91,12 @@ describe('層の優先順位', () => {
     expect(zoneTotal(makeState({ p0z0: ['dangai', 'heigen'] }), 'p0z0')).toBe(4)
   })
 
-  it('足枷は4枚以下なら -2 のまま（自己条件の境界）', () => {
-    const s = makeState({ p0z0: ['ashikase', 'heigen', 'heigen', 'hanmo'] })
-    expect(valuesInOrder(s, 'p0z0')).toEqual([-2, 1, 1, 1])
-    expect(zoneTotal(s, 'p0z0')).toBe(1)
+  it('足枷は4枚以下なら -3 のまま（自己条件の境界）', () => {
+    // 詰め物は数値2の氷山にする。数値1で埋めると合計が0になり、
+    // 「足枷が -3 のまま」なのか「ゾーンが潰れた」のかを区別できない
+    const s = makeState({ p0z0: ['ashikase', 'hyozan', 'hyozan', 'hanmo'] })
+    expect(valuesInOrder(s, 'p0z0')).toEqual([-3, 2, 2, 1])
+    expect(zoneTotal(s, 'p0z0')).toBe(2)
   })
 
   it('陽炎 > 洞穴 > 月光：3層すべて同居しても陽炎が勝つ（3+0+0）', () => {
@@ -161,9 +163,9 @@ describe('zoneTotal / score', () => {
 
   it('両ゾーンともマイナスなら積は正（正典 §5、将来のカード追加向け）', () => {
     const s = makeState({ p0z0: ['ashikase'], p0z1: ['ashikase'] })
-    expect(zoneTotal(s, 'p0z0')).toBe(-2)
-    expect(zoneTotal(s, 'p0z1')).toBe(-2)
-    expect(score(s, 0)).toBe(4)
+    expect(zoneTotal(s, 'p0z0')).toBe(-3)
+    expect(zoneTotal(s, 'p0z1')).toBe(-3)
+    expect(score(s, 0)).toBe(9)
   })
 
   it('プレイヤーごとに独立して集計される', () => {

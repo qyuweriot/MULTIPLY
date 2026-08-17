@@ -18,7 +18,7 @@ import { CardDetail } from './CardDetail.tsx'
 import type { HoveredCard } from './CardDetail.tsx'
 import { EffectLayer } from './EffectLayer.tsx'
 import type { EffectEvent, MotionMode } from './effects.ts'
-import { BOARD_MS, CUTIN_MS, describeEffect, findCard } from './effects.ts'
+import { BOARD_MS, CUTIN_MS, describeEffect, findCard, handFxOf } from './effects.ts'
 import { Hand } from './Hand.tsx'
 import { Log } from './Log.tsx'
 import { Result } from './Result.tsx'
@@ -324,13 +324,7 @@ export default function App() {
       ? selectableMoveTos(moves, { ...targetSel, step: 'moveTo', targetUid: carrying.cardUid })
       : selectableMoveTos(moves, selection)
 
-  /** 平原は使用者の手札、疾風は両者の手札に重ねる */
-  const handFx = (p: PlayerId) => {
-    if (boardFx === null) return null
-    const mine = boardFx.cardId === 'heigen' && boardFx.player === p
-    if (!mine && boardFx.cardId !== 'shippu') return null
-    return { cardId: boardFx.cardId, seq: boardFx.seq }
-  }
+  const handFx = (p: PlayerId) => handFxOf(boardFx, p)
 
   return (
     <div className={`app ${drag !== null || targetDrag.drag !== null ? 'app--dragging' : ''}`}>

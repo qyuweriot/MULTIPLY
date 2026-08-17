@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { applyMove } from '../src/core/apply.ts'
 import type { GameState, Move, ZoneKey } from '../src/core/types.ts'
-import { cardNameOf, describeEffect, findCard, isEffectZone } from '../src/ui/effects.ts'
+import { cardNameOf, describeEffect, findCard, handFxOf, isEffectZone } from '../src/ui/effects.ts'
 import { makeState, uidOfNth, withHand } from './helpers.ts'
 
 /** 手札の先頭を指定ゾーンへ置き、その1手を演出イベントに翻訳する */
@@ -208,6 +208,36 @@ describe('演出を出すゾーンの判定', () => {
 
   it('演出がなければ光らない', () => {
     expect(isEffectZone(null, 'p0z0')).toBe(false)
+  })
+})
+
+describe('手札に重ねる演出', () => {
+  it('平原は使用者の手札だけを引き直すので、使用者側にしか出ない', () => {
+    const s = withHand(makeState({}), ['heigen', 'dangai'])
+    const { event } = play(s)
+    expect(handFxOf(event, 0)).toEqual({ cardId: 'heigen', seq: 7 })
+    expect(handFxOf(event, 1)).toBeNull()
+  })
+
+  it('疾風は両者の手札が入れ替わるので、両方に出る', () => {
+    const s = withHand(makeState({}), ['shippu'])
+    const { event } = play(s)
+    expect(handFxOf(event, 0)).toEqual({ cardId: 'shippu', seq: 7 })
+    expect(handFxOf(event, 1)).toEqual({ cardId: 'shippu', seq: 7 })
+  })
+
+  it('手札が動かないカードでは出ない', () => {
+    const s = withHand(makeState({}), ['dangai'])
+    expect(handFxOf(play(s).event, 0)).toBeNull()
+  })
+
+  it('捨てただけの手と、演出なしでは出ない', () => {
+    const s = withHand(
+      makeState({ p0z0: ['hyozan'], p0z1: ['hyozan'], p1z0: ['hyozan'], p1z1: ['hyozan'] }),
+      ['heigen'],
+    )
+    expect(handFxOf(play(s, { discardOnly: true }).event, 0)).toBeNull()
+    expect(handFxOf(null, 0)).toBeNull()
   })
 })
 

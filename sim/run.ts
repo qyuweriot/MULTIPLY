@@ -11,11 +11,11 @@ import { CARD_DEFS } from '../src/core/cards.ts'
 import { seedFrom } from '../src/core/rng.ts'
 import { result } from '../src/core/score.ts'
 import { createGame } from '../src/core/setup.ts'
-import type { GameState, PlayerId } from '../src/core/types.ts'
+import type { PlayerId } from '../src/core/types.ts'
 import { ALL_ZONES } from '../src/core/types.ts'
-import { score, zoneTotal } from '../src/core/value.ts'
+import { zoneTotal } from '../src/core/value.ts'
 import type { GameRecord, Metrics } from './metrics.ts'
-import { summarize } from './metrics.ts'
+import { leaderOf, summarize } from './metrics.ts'
 
 interface Options {
   games: number
@@ -49,17 +49,11 @@ function asDifficulty(v: string | undefined): Difficulty {
   throw new Error(`難易度は ${DIFFICULTIES.join(' / ')} のいずれか（受け取った値: ${v}）`)
 }
 
-/** リードしているプレイヤー。並んでいたら null */
-function leaderOf(state: GameState): PlayerId | null {
-  const a = score(state, 0)
-  const b = score(state, 1)
-  return a > b ? 0 : b > a ? 1 : null
-}
-
 function playGame(seed: number, aiSeed: number, difficulties: [Difficulty, Difficulty]): GameRecord {
   let s = beginTurn(createGame(seed))
   let rng = seedFrom(aiSeed)
-  let leaderBeforeLastMove: PlayerId | null = null
+  // 必ずターン14を通るので上書きされる。初期値も盤面から採って null を持ち込まない
+  let leaderBeforeLastMove: PlayerId = leaderOf(s)
 
   while (s.phase === 'playing') {
     // 最終ターンの着手直前のリードを記録する
@@ -101,7 +95,7 @@ const mark = (ok: boolean) => (ok ? '✓' : '未達')
 function report(o: Options, m: Metrics, elapsedMs: number) {
   const rows: [string, string, string, boolean][] = [
     ['先攻勝率', pct(m.firstPlayerWinRate), '50 ± 3%', Math.abs(m.firstPlayerWinRate - 0.5) <= 0.03],
-    ['引き分け率', pct(m.drawRate), '5% 未満', m.drawRate < 0.05],
+    ['同点率', pct(m.tieRate), '5% 未満', m.tieRate < 0.05],
     ['0点決着率', pct(m.zeroScoreRate), '5% 未満', m.zeroScoreRate < 0.05],
     ['平均スコア', m.averageScore.toFixed(1), '25〜35', m.averageScore >= 25 && m.averageScore <= 35],
     ['最終ターン逆転率', pct(m.lastTurnSwingRate), '30% 未満', m.lastTurnSwingRate < 0.3],
@@ -117,7 +111,7 @@ function report(o: Options, m: Metrics, elapsedMs: number) {
     )
   }
 
-  console.log(`\n  参考: 明確な逆転 ${pct(m.clearReversalRate)} / 最高スコア ${m.maxScore}`)
+  console.log(`\n  参考: 最高スコア ${m.maxScore}`)
   console.log(
     `  診断: 空ゾーン ${m.avgEmptyZones.toFixed(2)}個/戦 ・ 潰されたゾーン ${m.avgCrushedZones.toFixed(2)}個/戦`,
   )

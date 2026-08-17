@@ -72,8 +72,8 @@ describe('buildDeck', () => {
     }
   })
 
-  it('本来の数値の総和が 46', () => {
-    expect(buildDeck().reduce((sum, c) => sum + base(c), 0)).toBe(46)
+  it('本来の数値の総和が 45', () => {
+    expect(buildDeck().reduce((sum, c) => sum + base(c), 0)).toBe(45)
   })
 
   it('uid が 0..29 で重複しない', () => {

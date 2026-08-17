@@ -133,3 +133,19 @@ export function isEffectZone(event: EffectEvent | null, zone: ZoneKey): boolean 
   if (event === null || event.discardOnly) return false
   return event.zone === zone || event.moved?.to === zone
 }
+
+/**
+ * そのプレイヤーの手札に重ねる演出。
+ *
+ * 平原は使用者の手札だけを引き直すので使用者側だけ、疾風は両者の手札が
+ * 入れ替わるので両方に出す。手札が動かないカードでは出さない。
+ */
+export function handFxOf(
+  event: EffectEvent | null,
+  player: PlayerId,
+): { cardId: CardId; seq: number } | null {
+  if (event === null || event.discardOnly) return null
+  const moves =
+    event.cardId === 'shippu' || (event.cardId === 'heigen' && event.player === player)
+  return moves ? { cardId: event.cardId, seq: event.seq } : null
+}

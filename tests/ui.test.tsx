@@ -524,12 +524,14 @@ describe('結果画面', () => {
     expect(html).toContain('もう一度遊ぶ')
   })
 
-  it('同点なら引き分けと出る', () => {
+  it('同点なら先攻の勝ちと出て、同点だったことも分かる', () => {
     const base = makeState({ p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['heigen'], p1z1: ['heigen'] })
     const html = renderToStaticMarkup(
       <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
     )
-    expect(html).toContain('引き分け')
+    expect(html).toContain('同点')
+    expect(html).toContain('プレイヤー1 の勝ち')
+    expect(html).not.toContain('引き分け')
   })
 
   // 決着した瞬間に盤面が下へずれる不具合（実測 128px）を防ぐ。別のパネルにすると戻る。
@@ -589,13 +591,19 @@ describe('得点セルの勝敗表示', () => {
     expect(cells.find((c) => c.includes('scorecell--lose'))).toContain('scorecell__value">1<')
   })
 
-  it('同点なら両方に「引き分け」が出る', () => {
+  it('同点なら先攻側が同点勝ち、後攻側が同点負けになる', () => {
     const even = makeState({
       p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['heigen'], p1z1: ['heigen'],
     })
     const html = renderBoard({ ...even, phase: 'finished' })
-    expect(html.match(/引き分け/g)).toHaveLength(2)
-    expect(html).not.toContain('scorecell--win')
-    expect(html).not.toContain('scorecell--lose')
+    // セル単位で見ないと、勝敗を取り違えても素通りする。
+    // 盤面は後攻（プレイヤー2）の行が先に出るので cells[0] が後攻
+    const cells = html.split('<div class="scorecell').slice(1)
+    expect(cells).toHaveLength(2)
+    expect(cells[0]).toContain('scorecell--tiedLose')
+    expect(cells[0]).toContain('同点負け')
+    expect(cells[1]).toContain('scorecell--tiedWin')
+    expect(cells[1]).toContain('同点勝ち')
+    expect(html).not.toContain('引き分け')
   })
 })

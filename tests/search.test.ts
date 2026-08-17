@@ -113,17 +113,17 @@ describe('★完了条件：難易度の強さの順序', () => {
     const r = rate(['hard', 'easy'], 30)
     expect(
       r.rate,
-      `hard ${r.wins}勝 ${r.losses}敗 ${r.draws}分（勝率 ${(r.rate * 100).toFixed(1)}%）`,
+      `hard ${r.wins}勝 ${r.losses}敗 ${r.ties}同点（勝率 ${(r.rate * 100).toFixed(1)}%）`,
     ).toBeGreaterThanOrEqual(0.8)
   })
 
   it('normal が easy に有意に勝ち越す', () => {
     const r = rate(['normal', 'easy'], 20)
-    expect(r.rate, `normal ${r.wins}勝 ${r.losses}敗 ${r.draws}分`).toBeGreaterThan(0.6)
+    expect(r.rate, `normal ${r.wins}勝 ${r.losses}敗 ${r.ties}同点`).toBeGreaterThan(0.6)
   })
 
   it('hard が normal に負け越さない', () => {
     const r = rate(['hard', 'normal'], 20)
-    expect(r.wins, `hard ${r.wins}勝 ${r.losses}敗 ${r.draws}分`).toBeGreaterThanOrEqual(r.losses)
+    expect(r.wins, `hard ${r.wins}勝 ${r.losses}敗 ${r.ties}同点`).toBeGreaterThanOrEqual(r.losses)
   })
 })
