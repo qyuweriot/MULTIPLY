@@ -87,7 +87,8 @@ body {
   color: var(--ink);
 }
 
-.topbar__fx {
+.topbar__fx,
+.topbar__sound {
   display: flex;
   align-items: center;
   gap: 0.3rem;

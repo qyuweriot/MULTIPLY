@@ -8,6 +8,7 @@ import { visibleTo } from '../ai/view.ts'
 import { applyMove, beginTurn } from '../core/apply.ts'
 import { legalMoves } from '../core/moves.ts'
 import { seedFrom } from '../core/rng.ts'
+import { result } from '../core/score.ts'
 import { createGame, TOTAL_TURNS } from '../core/setup.ts'
 import type { CardInstance, GameState, Move, PlayerId, ZoneKey } from '../core/types.ts'
 import { ALL_ZONES } from '../core/types.ts'
@@ -36,7 +37,9 @@ import {
   targetsDraggable,
 } from './selection.ts'
 import { passiveStatus, valueNote } from './passives.ts'
+import { soundForEvent } from './soundSpec.ts'
 import { useCardDrag } from './useCardDrag.ts'
+import { useSound } from './useSound.ts'
 
 /** 詳細オーバーレイを出すまでの待ち時間。盤面を横切るたびの点滅を防ぐ */
 const HOVER_DELAY_MS = 120
@@ -102,6 +105,10 @@ export default function App() {
   const state = history[history.length - 1]
   const playing = state.phase === 'playing'
   const moves = useMemo(() => (playing ? legalMoves(state) : []), [state, playing])
+
+  // ── 音 ──────────────────────────────────────────────────────────
+  // 演出トグルとは独立。音だけ消したい／演出だけ消したいのどちらもできる
+  const { soundOn, toggleSound, play, playUi } = useSound()
 
   // ── 演出 ────────────────────────────────────────────────────────
   const [fxOn, setFxOn] = useState(initialFxOn)
@@ -189,29 +196,35 @@ export default function App() {
       // 演出イベントは beginTurn より前に作る。ドロー後の盤面と比べると、
       // 疾風の手札交換と次ターンのドローが混ざって差分が読めなくなる
       const after = applyMove(state, move)
-      setPlayback((p) => {
-        const event = describeEffect(state, after, p.seq + 1)
-        return {
-          seq: p.seq + 1,
-          event,
-          phase: mode === 'off' || event === null ? 'idle' : mode === 'full' ? 'cutin' : 'board',
-          mode,
-        }
+      // 演出イベントは更新関数の外で作る。中で作って音まで鳴らすと、
+      // StrictMode が更新関数を二度呼ぶ開発時に音が重なる
+      const seq = playback.seq + 1
+      const event = describeEffect(state, after, seq)
+      // 音はカットインと同時に鳴らす。演出 OFF でも起点は変わらない
+      play(soundForEvent(event))
+      setPlayback({
+        seq,
+        event,
+        phase: mode === 'off' || event === null ? 'idle' : mode === 'full' ? 'cutin' : 'board',
+        mode,
       })
       setHistory((h) => [...h, after.phase === 'playing' ? beginTurn(after) : after])
       setSelection(START)
       setHovered(null)
     },
-    [state, mode],
+    [state, mode, play, playback.seq],
   )
 
   const applyPick = useCallback(
     (p: Pick, from: Selection) => {
       const next = advanceSelection(moves, from, p)
-      if ('step' in next) setSelection(next)
-      else commit(next)
+      if ('step' in next) {
+        // まだ着手ではない。選択が1段進んだ手応えだけ返す
+        playUi('pick')
+        setSelection(next)
+      } else commit(next)
     },
-    [moves, commit],
+    [moves, commit, playUi],
   )
 
   const pick = useCallback((p: Pick) => applyPick(p, selection), [applyPick, selection])
@@ -221,13 +234,17 @@ export default function App() {
     onDragStart: (cardUid) => {
       clearHoverTimer()
       setHovered(null)
+      playUi('pick')
       setSelection({ step: 'zone', cardUid })
     },
     // 選択 state の反映を待たずに済むよう、ドラッグ中のカードから直接組み立てる
     droppableZones: (cardUid) => selectableZones(moves, { step: 'zone', cardUid }),
     onDrop: (zone, cardUid) => applyPick({ zone }, { step: 'zone', cardUid }),
     onClick: (cardUid) => applyPick({ cardUid }, START),
-    onCancel: () => setSelection(START),
+    onCancel: () => {
+      playUi('cancel')
+      setSelection(START)
+    },
   })
 
   // 渦潮の対象を、移動先ゾーンへ運ぶドラッグ。
@@ -238,6 +255,7 @@ export default function App() {
     onDragStart: () => {
       clearHoverTimer()
       setHovered(null)
+      playUi('pick')
     },
     droppableZones: (targetUid) =>
       targetSel === null
@@ -251,7 +269,8 @@ export default function App() {
     onClick: (targetUid) => {
       if (targetSel !== null) applyPick({ targetUid }, targetSel)
     },
-    onCancel: () => {},
+    // 運んだ先が移動先でなければ元に戻る。選択の段は保たれる
+    onCancel: () => playUi('cancel'),
   })
 
   // ── CPU の手番 ──────────────────────────────────────────────────
@@ -270,6 +289,23 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [cpuTurn, busy, opponent, state, commit])
 
+  // ── 決着音 ──────────────────────────────────────────────────────
+  // 最後の着手の演出が引けてから1回だけ鳴らす。ref で見張るのは、決着した盤面で
+  // 再描画が走るたびに鳴るのと、StrictMode の二重実行を防ぐため
+  const endAnnounced = useRef(false)
+
+  useEffect(() => {
+    if (state.phase !== 'finished') {
+      endAnnounced.current = false
+      return
+    }
+    if (busy || endAnnounced.current) return
+    endAnnounced.current = true
+    // CPU 戦は人間（プレイヤー0）から見た勝敗。ホットシートは誰かが勝った合図
+    const { winner } = result(state)
+    playUi(opponent === 'human' || winner !== CPU_PLAYER ? 'win' : 'lose')
+  }, [state, busy, opponent, playUi])
+
   // ── 履歴操作 ────────────────────────────────────────────────────
   function undo() {
     if (history.length <= 1) return
@@ -284,6 +320,7 @@ export default function App() {
     setSelection(START)
     setHovered(null)
     resetFx()
+    playUi('undo')
   }
 
   function restart(newSeed: number) {
@@ -293,6 +330,7 @@ export default function App() {
     setSelection(START)
     setHovered(null)
     resetFx()
+    playUi('newGame')
   }
 
   function changeOpponent(next: Opponent) {
@@ -354,6 +392,15 @@ export default function App() {
         <label className="topbar__fx">
           <input type="checkbox" checked={fxOn} onChange={(e) => toggleFx(e.target.checked)} />
           演出
+        </label>
+        {/* 音は演出とも prefers-reduced-motion とも独立。片方だけ切れる */}
+        <label className="topbar__sound">
+          <input
+            type="checkbox"
+            checked={soundOn}
+            onChange={(e) => toggleSound(e.target.checked)}
+          />
+          音
         </label>
         <div className="topbar__actions">
           <button type="button" onClick={undo} disabled={history.length <= 1}>
