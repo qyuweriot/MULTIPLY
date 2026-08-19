@@ -888,3 +888,190 @@ button:disabled {
     margin-left: 0;
   }
 }
+
+/* ── 遊び方（モーダル）─────────────────────────────
+   position: fixed で浮かせるだけにして、.app の中の高さには一切関わらせない。
+   8-B で「盤面と両手札が1画面に収まる」ように詰めた計算を、ここで崩さないため */
+.rules {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(20, 22, 26, 0.6);
+  overflow-y: auto;
+}
+
+.rules__sheet {
+  width: min(52rem, 100%);
+  max-height: 90dvh;
+  overflow-y: auto;
+  padding: 1.2rem 1.4rem 1.6rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+/* 見出しと閉じるボタンは、長い本文をスクロールしても見える位置に留める */
+.rules__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -1.2rem -1.4rem 0.8rem;
+  padding: 1rem 1.4rem 0.6rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.rules__title {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+}
+
+.rules__block {
+  margin-bottom: 1.2rem;
+}
+
+.rules__block h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.rules__block p {
+  margin: 0 0 0.4rem;
+}
+
+.rules__block ul,
+.rules__block ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.rules__note {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+/* 計算順序。層の番号はカード欄の「層 1」と対応するので、自分で出す */
+.rules__layers {
+  display: grid;
+  gap: 0.15rem;
+  padding-left: 0;
+  list-style: none;
+}
+
+.rules__layers li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.rules__layer-no {
+  flex: none;
+  min-width: 3.2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.rules__layer-what {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.rules__layer-who {
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+/* カード一覧。幅に追従させる */
+.rules__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+
+.rules__card {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.rules__card img {
+  flex: none;
+  width: 56px;
+  height: auto;
+  aspect-ratio: 744 / 1039;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.rules__card-body {
+  min-width: 0;
+}
+
+.rules__card-name {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rules__card-reading {
+  margin-left: 0.4rem;
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.rules__card-meta {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.rules__card-text {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* 狭い画面では余白を詰め、カードは1列に */
+@media (max-width: 560px) {
+  .rules {
+    padding: 0.5rem;
+  }
+
+  .rules__sheet {
+    padding: 1rem 0.9rem 1.2rem;
+    max-height: 94dvh;
+  }
+
+  .rules__head {
+    margin: -1rem -0.9rem 0.7rem;
+    padding: 0.8rem 0.9rem 0.5rem;
+  }
+
+  .rules__cards {
+    grid-template-columns: 1fr;
+  }
+}

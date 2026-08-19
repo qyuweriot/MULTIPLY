@@ -23,6 +23,7 @@ import { BOARD_MS, CUTIN_MS, describeEffect, findCard, handFxOf } from './effect
 import { Hand } from './Hand.tsx'
 import { Log } from './Log.tsx'
 import { Result } from './Result.tsx'
+import { Rules } from './Rules.tsx'
 import { TargetPicker } from './TargetPicker.tsx'
 import { useBoardTransition } from './useBoardTransition.ts'
 import type { Pick, Selection } from './selection.ts'
@@ -53,6 +54,9 @@ const CPU_PLAYER: PlayerId = 1
 /** 演出の ON/OFF を次回起動まで覚えておく */
 const FX_KEY = 'multiply:fx'
 
+/** 遊び方を一度でも閉じたか。初回だけ自動で開くための目印 */
+const SEEN_RULES_KEY = 'multiply:seenRules'
+
 type Opponent = 'human' | Difficulty
 
 /** AI の乱数はゲーム本体の state.rng とは別系統にする */
@@ -70,6 +74,12 @@ function randomSeed(): number {
 function initialFxOn(): boolean {
   if (typeof window === 'undefined') return true
   return window.localStorage.getItem(FX_KEY) !== 'off'
+}
+
+/** 初回だけ遊び方を開く。一度閉じたら次からは自分で開いてもらう */
+function initialRulesOpen(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem(SEEN_RULES_KEY) !== 'yes'
 }
 
 /** OS の「視差効果を減らす」設定。有効なら演出は一切動かさない */
@@ -109,6 +119,14 @@ export default function App() {
   // ── 音 ──────────────────────────────────────────────────────────
   // 演出トグルとは独立。音だけ消したい／演出だけ消したいのどちらもできる
   const { soundOn, toggleSound, play, playUi } = useSound()
+
+  // ── 遊び方 ──────────────────────────────────────────────────────
+  const [rulesOpen, setRulesOpen] = useState(initialRulesOpen)
+
+  const closeRules = useCallback(() => {
+    setRulesOpen(false)
+    if (typeof window !== 'undefined') window.localStorage.setItem(SEEN_RULES_KEY, 'yes')
+  }, [])
 
   // ── 演出 ────────────────────────────────────────────────────────
   const [fxOn, setFxOn] = useState(initialFxOn)
@@ -277,8 +295,9 @@ export default function App() {
   const cpuTurn = opponent !== 'human' && playing && state.current === CPU_PLAYER
 
   useEffect(() => {
-    // 演出の再生中は思考に入らない。カットインの裏で盤面が進むのを防ぐ
-    if (!cpuTurn || busy) return
+    // 演出の再生中と、遊び方を読んでいる間は思考に入らない。
+    // 盤面が裏で進んでしまうのを防ぐ
+    if (!cpuTurn || busy || rulesOpen) return
     const difficulty = opponent as Difficulty
     const timer = setTimeout(() => {
       // 渡すのは PublicView だけ。CPU は山札の順序を見られない（§1-4）
@@ -287,7 +306,7 @@ export default function App() {
       commit(move)
     }, CPU_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [cpuTurn, busy, opponent, state, commit])
+  }, [cpuTurn, busy, rulesOpen, opponent, state, commit])
 
   // ── 決着音 ──────────────────────────────────────────────────────
   // 最後の着手の演出が引けてから1回だけ鳴らす。ref で見張るのは、決着した盤面で
@@ -407,6 +426,9 @@ export default function App() {
           音
         </label>
         <div className="topbar__actions">
+          <button type="button" onClick={() => setRulesOpen(true)}>
+            遊び方
+          </button>
           <button type="button" onClick={undo} disabled={history.length <= 1}>
             1手戻す
           </button>
@@ -501,6 +523,8 @@ export default function App() {
       )}
       {/* ドラッグ中は詳細を出さない。ref ではなく描画時の導出なのでリセット漏れが起きない */}
       <CardDetail hovered={drag !== null || targetDrag.drag !== null ? null : hovered} />
+
+      {rulesOpen && <Rules labels={labels} onClose={closeRules} />}
 
       <EffectLayer
         event={playback.event}

@@ -4,8 +4,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { beginTurn } from '../src/core/apply.ts'
-import { CARD_DEFS } from '../src/core/cards.ts'
-import { createGame } from '../src/core/setup.ts'
+import { ALL_CARD_DEFS, CARD_DEFS, DECK_SIZE } from '../src/core/cards.ts'
+import { INITIAL_HAND_SIZE, TOTAL_TURNS, createGame } from '../src/core/setup.ts'
 import type { GameState } from '../src/core/types.ts'
 import App from '../src/ui/App.tsx'
 import { Board } from '../src/ui/Board.tsx'
@@ -15,6 +15,7 @@ import { EffectLayer } from '../src/ui/EffectLayer.tsx'
 import type { EffectEvent } from '../src/ui/effects.ts'
 import { Hand } from '../src/ui/Hand.tsx'
 import { Result } from '../src/ui/Result.tsx'
+import { Rules } from '../src/ui/Rules.tsx'
 import { passiveStatus, valueNote } from '../src/ui/passives.ts'
 import { playerLabels } from '../src/labels.ts'
 import { makeState, withHand } from './helpers.ts'
@@ -471,13 +472,18 @@ describe('アプリ全体', () => {
     expect(html).toContain('fx-ghosts')
   })
 
-  // 山札・捨て札の枚数は出さない（情報設計上の判断）。
+  // 盤面には山札・捨て札の枚数を出さない（情報設計上の判断）。
   // .app__side は Phase 8-B でログとシード行の器として入ったので、
-  // 「サイドパネルが無いこと」ではなく中身で確かめる
-  it('山札・捨て札の枚数は表示しない', () => {
+  // 「サイドパネルが無いこと」ではなく中身で確かめる。
+  // 遊び方のモーダルは山札の枚数に触れるが、ここでは開いていない
+  it('盤面に山札・捨て札の枚数は表示しない', () => {
     const html = renderToStaticMarkup(<App />)
     expect(html).not.toContain('山札')
     expect(html).not.toContain('捨て札')
+  })
+
+  it('遊び方を開くボタンがある', () => {
+    expect(renderToStaticMarkup(<App />)).toContain('遊び方')
   })
 })
 
@@ -654,5 +660,67 @@ describe('得点セルの勝敗表示', () => {
     expect(cells[1]).toContain('scorecell--tiedWin')
     expect(cells[1]).toContain('同点勝ち')
     expect(html).not.toContain('引き分け')
+  })
+})
+
+describe('遊び方', () => {
+  const render = (labels = LABELS) => renderToStaticMarkup(<Rules labels={labels} onClose={noop} />)
+
+  it('ダイアログとして出る', () => {
+    const html = render()
+    expect(html).toContain('role="dialog"')
+    expect(html).toContain('aria-modal="true"')
+    expect(html).toContain('閉じる')
+  })
+
+  // ★ ここが本題。説明文をカード定義から引いていることを固定する。
+  //   書き写していると、カードを調整したときに説明だけ古くなる
+  it('12種すべての名前・読み・効果文が、定義そのままで出ている', () => {
+    const html = render()
+    expect(ALL_CARD_DEFS).toHaveLength(12)
+    for (const def of ALL_CARD_DEFS) {
+      expect(html, def.id).toContain(def.name)
+      expect(html, def.id).toContain(def.reading)
+      expect(html, def.id).toContain(def.text)
+    }
+  })
+
+  it('各カードの本来の数値と枚数が定義と一致する', () => {
+    const html = render()
+    for (const def of ALL_CARD_DEFS) {
+      // 「数値 <b>3</b> ／ 2枚」の形で出る
+      expect(html, def.id).toContain(`<b>${def.baseValue}</b> ／ ${def.copies}枚`)
+    }
+  })
+
+  it('山札の枚数・ターン数・初期手札が定数から出ている', () => {
+    const html = render()
+    expect(html).toContain(`<b>${DECK_SIZE}</b> 枚`)
+    expect(html).toContain(`<b>${TOTAL_TURNS}</b> ターン`)
+    expect(html).toContain(`<b>${INITIAL_HAND_SIZE}</b> 枚`)
+  })
+
+  it('ゾーン名と呼称が表示設定に従う', () => {
+    expect(render()).toContain('Player1')
+    const cpu = render(CPU_LABELS)
+    expect(cpu).toContain('Player')
+    expect(cpu).not.toContain('Player1')
+    // L と R は掛け算の説明に出る
+    expect(render()).toContain('L の合計 × R の合計')
+  })
+
+  it('計算の4層と、間違えやすいところが出る', () => {
+    const html = render()
+    expect(html).toContain('陽炎')
+    expect(html).toContain('先に決まった数値は、あとの層では変わらない')
+    expect(html).toContain('月光は足枷の解除札になる')
+  })
+
+  it('置いたときに働く札と、常にはたらく札を書き分ける', () => {
+    const html = render()
+    expect(html).toContain('置いたとき')
+    expect(html).toContain('常にはたらく')
+    // 氷山だけは数値を動かさない
+    expect(html).toContain('設置制限')
   })
 })
