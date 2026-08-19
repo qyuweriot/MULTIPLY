@@ -416,72 +416,80 @@ export default function App() {
         </div>
       </header>
 
-      {/* 選択ガイドと決着表示は同じ .picker の枠を共有する。別々のパネルにすると
-          決着した瞬間にその高さぶん盤面が下へずれ、FLIP がそれを移動として拾う */}
-      {playing ? (
-        <TargetPicker
+      {/* 遊ぶのに要るもの（ガイド・両手札・盤面）を main に、参照だけのもの
+          （ログ・シード行）を side に分ける。広い画面では side が右カラムへ回り、
+          そのぶん縦が空く。狭い画面では従来どおり下に積まれる。
+          並び順は変えていないので、上のブロックの位置は1pxも動かない */}
+      <div className="app__main">
+        {/* 選択ガイドと決着表示は同じ .picker の枠を共有する。別々のパネルにすると
+            決着した瞬間にその高さぶん盤面が下へずれ、FLIP がそれを移動として拾う */}
+        {playing ? (
+          <TargetPicker
+            state={state}
+            selection={selection}
+            labels={labels}
+            moves={moves}
+            onBack={() => setSelection(backSelection(selection))}
+            onReset={() => setSelection(START)}
+          />
+        ) : (
+          <Result state={state} labels={labels} onRestart={() => restart(randomSeed())} />
+        )}
+
+        <Hand
           state={state}
-          selection={selection}
+          player={1}
           labels={labels}
-          moves={moves}
-          onBack={() => setSelection(backSelection(selection))}
-          onReset={() => setSelection(START)}
+          fx={handFx(1)}
+          selectableUids={handSelectable(1)}
+          selectedUid={state.current === 1 ? selectedUid : null}
+          draggingUid={drag?.cardUid ?? null}
+          dragHandlers={handlers}
+          onSelect={(cardUid) => applyPick({ cardUid }, START)}
+          onHover={handleHover}
         />
-      ) : (
-        <Result state={state} labels={labels} onRestart={() => restart(randomSeed())} />
-      )}
 
-      <Hand
-        state={state}
-        player={1}
-        labels={labels}
-        fx={handFx(1)}
-        selectableUids={handSelectable(1)}
-        selectedUid={state.current === 1 ? selectedUid : null}
-        draggingUid={drag?.cardUid ?? null}
-        dragHandlers={handlers}
-        onSelect={(cardUid) => applyPick({ cardUid }, START)}
-        onHover={handleHover}
-      />
+        <Board
+          state={state}
+          labels={labels}
+          placeableZones={selectableZones(moves, selection)}
+          movableZones={movableZones}
+          targetUids={selectableTargets(moves, selection)}
+          dragOverZone={dragOverZone}
+          targetDraggable={targetsDraggable(moves, selection)}
+          targetDragHandlers={targetDrag.handlers}
+          draggingUid={targetDrag.drag?.cardUid ?? null}
+          effect={boardFx}
+          onSelectZone={(zone) => pick({ zone })}
+          onSelectMoveTo={(moveTo) => pick({ moveTo })}
+          onSelectTarget={(targetUid) => pick({ targetUid })}
+          onHover={handleHover}
+        />
 
-      <Board
-        state={state}
-        labels={labels}
-        placeableZones={selectableZones(moves, selection)}
-        movableZones={movableZones}
-        targetUids={selectableTargets(moves, selection)}
-        dragOverZone={dragOverZone}
-        targetDraggable={targetsDraggable(moves, selection)}
-        targetDragHandlers={targetDrag.handlers}
-        draggingUid={targetDrag.drag?.cardUid ?? null}
-        effect={boardFx}
-        onSelectZone={(zone) => pick({ zone })}
-        onSelectMoveTo={(moveTo) => pick({ moveTo })}
-        onSelectTarget={(targetUid) => pick({ targetUid })}
-        onHover={handleHover}
-      />
+        <Hand
+          state={state}
+          player={0}
+          labels={labels}
+          fx={handFx(0)}
+          selectableUids={handSelectable(0)}
+          selectedUid={state.current === 0 ? selectedUid : null}
+          draggingUid={drag?.cardUid ?? null}
+          dragHandlers={handlers}
+          onSelect={(cardUid) => applyPick({ cardUid }, START)}
+          onHover={handleHover}
+        />
+      </div>
 
-      <Hand
-        state={state}
-        player={0}
-        labels={labels}
-        fx={handFx(0)}
-        selectableUids={handSelectable(0)}
-        selectedUid={state.current === 0 ? selectedUid : null}
-        draggingUid={drag?.cardUid ?? null}
-        dragHandlers={handlers}
-        onSelect={(cardUid) => applyPick({ cardUid }, START)}
-        onHover={handleHover}
-      />
+      <div className="app__side">
+        <Log state={state} labels={labels} />
 
-      <Log state={state} labels={labels} />
-
-      <footer className="seedline">
-        シード {seed}
-        <button type="button" onClick={() => restart(seed)}>
-          同じ配りで最初から
-        </button>
-      </footer>
+        <footer className="seedline">
+          シード {seed}
+          <button type="button" onClick={() => restart(seed)}>
+            同じ配りで最初から
+          </button>
+        </footer>
+      </div>
 
       {drag !== null && <DragGhost state={state} cardUid={drag.cardUid} ghostRef={ghostRef} />}
       {targetDrag.drag !== null && (

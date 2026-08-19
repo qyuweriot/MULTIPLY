@@ -726,3 +726,27 @@
     display: none;
   }
 }
+
+/* ── 狭い画面のカットイン ─────────────────────────
+   絵と文字の横並び（max-width: 900px）は、タブレット縦以下だと文字が潰れる。
+   縦積みに切り替え、絵の高さも抑える */
+@media (max-width: 760px) {
+  .cutin__body {
+    flex-direction: column;
+    gap: 0.8rem;
+    padding: 0 1rem;
+    text-align: center;
+  }
+
+  .cutin__art {
+    height: min(34vh, 260px);
+  }
+
+  .cutin__info {
+    max-width: 22rem;
+    padding-left: 0;
+    border-left: none;
+    border-top: 2px solid rgba(255, 255, 255, 0.45);
+    padding-top: 0.6rem;
+  }
+}

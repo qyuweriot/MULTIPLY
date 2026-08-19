@@ -432,6 +432,25 @@ describe('アプリ全体', () => {
     expect(html.match(/card--selectable/g)).toHaveLength(3)
   })
 
+  // 広い画面ではログとシード行が右カラムへ回る（Phase 8-B）。
+  // 見た目は CSS の仕事なので、ここでは器の構造だけを固定する
+  it('遊ぶものと参照するものが別の器に分かれている', () => {
+    const html = renderToStaticMarkup(<App />)
+    const main = html.split('class="app__main"')[1]?.split('class="app__side"')[0] ?? ''
+    const side = html.split('class="app__side"')[1] ?? ''
+
+    // 遊ぶのに要るもの
+    expect(main).toContain('class="picker')
+    expect(main.match(/class="hand /g)).toHaveLength(2)
+    expect(main).toContain('class="board"')
+    // 参照するだけのもの
+    expect(side).toContain('行動ログ')
+    expect(side).toContain('シード')
+    // 逆流していないこと
+    expect(main).not.toContain('行動ログ')
+    expect(side).not.toContain('class="board"')
+  })
+
   it('対戦相手を選べる（人間とCPU3段）', () => {
     const html = renderToStaticMarkup(<App />)
     expect(html).toContain('対戦相手')
@@ -452,9 +471,11 @@ describe('アプリ全体', () => {
     expect(html).toContain('fx-ghosts')
   })
 
-  it('サイドパネルと山札・捨て札の表示が無い', () => {
+  // 山札・捨て札の枚数は出さない（情報設計上の判断）。
+  // .app__side は Phase 8-B でログとシード行の器として入ったので、
+  // 「サイドパネルが無いこと」ではなく中身で確かめる
+  it('山札・捨て札の枚数は表示しない', () => {
     const html = renderToStaticMarkup(<App />)
-    expect(html).not.toContain('app__side')
     expect(html).not.toContain('山札')
     expect(html).not.toContain('捨て札')
   })
