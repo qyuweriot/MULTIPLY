@@ -16,9 +16,13 @@ import type { EffectEvent } from '../src/ui/effects.ts'
 import { Hand } from '../src/ui/Hand.tsx'
 import { Result } from '../src/ui/Result.tsx'
 import { passiveStatus, valueNote } from '../src/ui/passives.ts'
+import { playerLabels } from '../src/labels.ts'
 import { makeState, withHand } from './helpers.ts'
 
 const noop = () => {}
+/** 既定は人間同士（Player1 / Player2）。CPU 戦を見るテストだけ差し替える */
+const LABELS = playerLabels(false)
+const CPU_LABELS = playerLabels(true)
 const noHandlers = () => ({
   onPointerDown: noop,
   onPointerMove: noop,
@@ -30,6 +34,7 @@ function renderBoard(state: GameState, effect: EffectEvent | null = null) {
   return renderToStaticMarkup(
     <Board
       state={state}
+      labels={LABELS}
       placeableZones={new Set()}
       movableZones={new Set()}
       targetUids={new Set()}
@@ -62,7 +67,7 @@ function event(over: Partial<EffectEvent> = {}): EffectEvent {
 
 function renderCutIn(e: EffectEvent) {
   return renderToStaticMarkup(
-    <EffectLayer event={e} showCutIn ghostLayerRef={{ current: null }} onSkip={noop} />,
+    <EffectLayer event={e} showCutIn labels={LABELS} ghostLayerRef={{ current: null }} onSkip={noop} />,
   )
 }
 
@@ -78,11 +83,17 @@ function renderDetail(hovered: HoveredCard) {
   }
 }
 
-function renderHand(state: GameState, player: 0 | 1, selectable: Set<number>) {
+function renderHand(
+  state: GameState,
+  player: 0 | 1,
+  selectable: Set<number>,
+  labels = LABELS,
+) {
   return renderToStaticMarkup(
     <Hand
       state={state}
       player={player}
+      labels={labels}
       selectableUids={selectable}
       selectedUid={null}
       draggingUid={null}
@@ -96,10 +107,10 @@ function renderHand(state: GameState, player: 0 | 1, selectable: Set<number>) {
 describe('盤面の描画', () => {
   it('4ゾーンの名前と合計が出る', () => {
     const html = renderBoard(makeState({ p0z0: ['dangai'] }))
-    expect(html).toContain('第一')
-    expect(html).toContain('第二')
-    expect(html).toContain('プレイヤー1')
-    expect(html).toContain('プレイヤー2')
+    expect(html).toContain('Player1-L')
+    expect(html).toContain('Player1-R')
+    expect(html).toContain('Player2-L')
+    expect(html).toContain('Player2-R')
     expect(html).toContain('合計')
     expect(html).toContain('（空）')
   })
@@ -175,6 +186,7 @@ describe('盤面の描画', () => {
     const html = renderToStaticMarkup(
       <Board
         state={state}
+        labels={LABELS}
         placeableZones={new Set(['p0z0', 'p0z1'])}
         movableZones={new Set()}
         targetUids={new Set()}
@@ -231,6 +243,7 @@ describe('渦潮の対象をつまんで運ぶ', () => {
     return renderToStaticMarkup(
       <Board
         state={s}
+        labels={LABELS}
         placeableZones={new Set()}
         movableZones={new Set(['p1z0'])}
         targetUids={new Set([s.zones.p0z0.cards[0].uid])}
@@ -273,6 +286,7 @@ describe('「ここに置く」の領域確保', () => {
     const html = renderToStaticMarkup(
       <Board
         state={makeState({})}
+        labels={LABELS}
         placeableZones={new Set(['p0z0'])}
         movableZones={new Set(['p1z1'])}
         targetUids={new Set()}
@@ -291,7 +305,7 @@ describe('「ここに置く」の領域確保', () => {
   })
 })
 
-describe('得点セル（第一と第二の間）', () => {
+describe('得点セル（L と R の間）', () => {
   it('各プレイヤーの積が盤面の中央に出る', () => {
     const html = renderBoard(
       makeState({
@@ -381,6 +395,19 @@ describe('手札の描画', () => {
     const s = withHand(makeState({}), ['kagero'], 1)
     expect(renderHand(s, 1, new Set())).toContain('alt="陽炎"')
   })
+
+  it('人間戦の見出しは Player1 / Player2', () => {
+    const s = beginTurn(createGame(1))
+    expect(renderHand(s, 0, new Set())).toContain('Player1 の手札')
+    expect(renderHand(s, 1, new Set())).toContain('Player2 の手札')
+  })
+
+  // CPU が受け持つのは後攻。ここが逆だと「自分の手札」と「CPU の手札」が入れ替わる
+  it('CPU 戦の見出しは Player / CPU', () => {
+    const s = beginTurn(createGame(1))
+    expect(renderHand(s, 0, new Set(), CPU_LABELS)).toContain('Player の手札')
+    expect(renderHand(s, 1, new Set(), CPU_LABELS)).toContain('CPU の手札')
+  })
 })
 
 describe('アプリ全体', () => {
@@ -439,8 +466,8 @@ describe('発動カットイン', () => {
     expect(html).toContain('渦潮')
     expect(html).toContain('うずしお')
     expect(html).toContain('このゾーンにあるカードを1枚選び、別のゾーンへ移動させる。')
-    expect(html).toContain('プレイヤー1')
-    expect(html).toContain('プレイヤー2・第二') // 置いた先は相手のゾーン
+    expect(html).toContain('Player1')
+    expect(html).toContain('Player2-R') // 置いた先は相手のゾーン
   })
 
   it('カードごとに固有のクラスが付く（背景モーションの出し分け）', () => {
@@ -462,7 +489,7 @@ describe('発動カットイン', () => {
   it('置けずに捨てた手は、ゾーン名も効果文も出さない', () => {
     const html = renderCutIn(event({ cardId: 'dangai', discardOnly: true }))
     expect(html).toContain('置ける場所がないため捨札')
-    expect(html).not.toContain('第一')
+    expect(html).not.toContain('Player1-L')
     expect(html).not.toContain(CARD_DEFS.dangai.text)
   })
 
@@ -471,6 +498,7 @@ describe('発動カットイン', () => {
       <EffectLayer
         event={event()}
         showCutIn={false}
+        labels={LABELS}
         ghostLayerRef={{ current: null }}
         onSkip={noop}
       />,
@@ -516,21 +544,21 @@ describe('結果画面', () => {
       p1z1: ['heigen'], // 1
     })
     const finished: GameState = { ...base, phase: 'finished' }
-    const html = renderToStaticMarkup(<Result state={finished} onRestart={noop} />)
+    const html = renderToStaticMarkup(<Result state={finished} labels={LABELS} onRestart={noop} />)
 
-    expect(html).toContain('プレイヤー1 の勝ち')
-    expect(html).toContain('プレイヤー1 12')
-    expect(html).toContain('プレイヤー2 1')
+    expect(html).toContain('Player1 の勝ち')
+    expect(html).toContain('Player1 12')
+    expect(html).toContain('Player2 1')
     expect(html).toContain('もう一度遊ぶ')
   })
 
   it('同点なら先攻の勝ちと出て、同点だったことも分かる', () => {
     const base = makeState({ p0z0: ['heigen'], p0z1: ['heigen'], p1z0: ['heigen'], p1z1: ['heigen'] })
     const html = renderToStaticMarkup(
-      <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
+      <Result state={{ ...base, phase: 'finished' }} labels={LABELS} onRestart={noop} />,
     )
     expect(html).toContain('同点')
-    expect(html).toContain('プレイヤー1 の勝ち')
+    expect(html).toContain('Player1 の勝ち')
     expect(html).not.toContain('引き分け')
   })
 
@@ -538,7 +566,7 @@ describe('結果画面', () => {
   it('選択ガイドと同じ .picker の枠を使い、1行に収まっている', () => {
     const base = makeState({ p0z0: ['dangai'], p0z1: ['heigen'] })
     const html = renderToStaticMarkup(
-      <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
+      <Result state={{ ...base, phase: 'finished' }} labels={LABELS} onRestart={noop} />,
     )
     expect(html).toContain('class="picker picker--result"')
     // かつての見出し＋表の3段組みには戻さない
@@ -554,7 +582,7 @@ describe('結果画面', () => {
 
     const base = makeState({ p0z0: ['dangai'], p0z1: ['heigen'] })
     const done = renderToStaticMarkup(
-      <Result state={{ ...base, phase: 'finished' }} onRestart={noop} />,
+      <Result state={{ ...base, phase: 'finished' }} labels={LABELS} onRestart={noop} />,
     )
     expect(done.match(frame)).toHaveLength(1)
   })
@@ -563,9 +591,9 @@ describe('結果画面', () => {
 describe('得点セルの勝敗表示', () => {
   const board = makeState({
     p0z0: ['kagero'], // 3
-    p0z1: ['dangai', 'heigen'], // 4 → プレイヤー1 は 12
+    p0z1: ['dangai', 'heigen'], // 4 → Player1 は 12
     p1z0: ['heigen'], // 1
-    p1z1: ['heigen'], // 1 → プレイヤー2 は 1
+    p1z1: ['heigen'], // 1 → Player2 は 1
   })
 
   it('進行中は勝敗を出さない', () => {
@@ -597,7 +625,7 @@ describe('得点セルの勝敗表示', () => {
     })
     const html = renderBoard({ ...even, phase: 'finished' })
     // セル単位で見ないと、勝敗を取り違えても素通りする。
-    // 盤面は後攻（プレイヤー2）の行が先に出るので cells[0] が後攻
+    // 盤面は後攻（Player2）の行が先に出るので cells[0] が後攻
     const cells = html.split('<div class="scorecell').slice(1)
     expect(cells).toHaveLength(2)
     expect(cells[0]).toContain('scorecell--tiedLose')

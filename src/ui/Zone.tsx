@@ -1,5 +1,6 @@
 import type { CardId, GameState, ZoneKey } from '../core/types.ts'
 import { cardValues, zoneTotal } from '../core/value.ts'
+import type { PlayerLabels } from '../labels.ts'
 import { zoneName } from '../labels.ts'
 import { Card } from './Card.tsx'
 import type { HoverHandler, PointerHandlers } from './Card.tsx'
@@ -8,6 +9,7 @@ import { passiveStatus, zoneBadges } from './passives.ts'
 export interface ZoneProps {
   state: GameState
   zoneKey: ZoneKey
+  labels: PlayerLabels
   /** 設置先として選べるか */
   placeable?: boolean
   /** 渦潮の移動先として選べるか */
@@ -36,6 +38,7 @@ export interface ZoneProps {
 export function Zone({
   state,
   zoneKey,
+  labels,
   placeable = false,
   movable = false,
   forced = false,
@@ -79,7 +82,7 @@ export function Zone({
         <span className={`zone__fx zone__fx--${fx.cardId}`} key={fx.seq} aria-hidden="true" />
       )}
       <header className="zone__head">
-        <span className="zone__name">{zoneName(zoneKey)}</span>
+        <span className="zone__name">{zoneName(zoneKey, labels)}</span>
         <span className="zone__total">
           合計 <b>{total}</b>
         </span>

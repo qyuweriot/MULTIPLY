@@ -1,11 +1,13 @@
 import type { CardId, GameState, PlayerId } from '../core/types.ts'
-import { PLAYER_LABELS } from '../labels.ts'
+import type { PlayerLabels } from '../labels.ts'
 import { Card } from './Card.tsx'
 import type { HoverHandler, PointerHandlers } from './Card.tsx'
 
 export interface HandProps {
   state: GameState
   player: PlayerId
+  /** 呼称は対戦相手に依存する（人間戦は Player1/Player2、CPU 戦は Player/CPU） */
+  labels: PlayerLabels
   /** この手札に重ねる演出（平原・疾風）。key を兼ねる seq とセットで渡す */
   fx?: { cardId: CardId; seq: number } | null
   /** 選べる手札の uid（手番でないプレイヤーは空集合） */
@@ -24,6 +26,7 @@ export interface HandProps {
 export function Hand({
   state,
   player,
+  labels,
   fx = null,
   selectableUids,
   selectedUid,
@@ -37,7 +40,7 @@ export function Hand({
   return (
     <section className={`hand ${active ? 'hand--active' : ''}`}>
       <header className="hand__head">
-        <span>{PLAYER_LABELS[player]}の手札</span>
+        <span>{labels[player]} の手札</span>
         {active && <span className="hand__turn">手番</span>}
       </header>
       {fx !== null && (

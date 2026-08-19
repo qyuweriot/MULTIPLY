@@ -1,6 +1,12 @@
 import { result } from '../core/score.ts'
 import type { GameState } from '../core/types.ts'
-import { PLAYER_LABELS } from '../labels.ts'
+import type { PlayerLabels } from '../labels.ts'
+
+export interface ResultProps {
+  state: GameState
+  labels: PlayerLabels
+  onRestart: () => void
+}
 
 /**
  * 決着表示。
@@ -12,18 +18,18 @@ import { PLAYER_LABELS } from '../labels.ts'
  * ゾーンごとの内訳は盤面（各ゾーンの「合計」と、ゾーン間の得点セル）に出ているので、
  * ここで表を組み直す必要はない。勝敗そのものは得点セルが大きく示す。
  */
-export function Result({ state, onRestart }: { state: GameState; onRestart: () => void }) {
+export function Result({ state, labels, onRestart }: ResultProps) {
   const { scores, winner, tied } = result(state)
 
   return (
     <div className="picker picker--result">
       <p className="picker__prompt">
         {tied
-          ? `同点 — ${PLAYER_LABELS[winner]} の勝ち（先攻）`
-          : `${PLAYER_LABELS[winner]} の勝ち`}
+          ? `同点 — ${labels[winner]} の勝ち（先攻）`
+          : `${labels[winner]} の勝ち`}
       </p>
       <p className="picker__steps">
-        {PLAYER_LABELS[0]} {scores[0]} ／ {PLAYER_LABELS[1]} {scores[1]}
+        {labels[0]} {scores[0]} ／ {labels[1]} {scores[1]}
       </p>
       <div className="picker__actions">
         <button type="button" onClick={onRestart}>

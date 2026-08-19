@@ -12,7 +12,7 @@ import { result } from '../core/score.ts'
 import { createGame, TOTAL_TURNS } from '../core/setup.ts'
 import type { CardInstance, GameState, Move, PlayerId, ZoneKey } from '../core/types.ts'
 import { ALL_ZONES } from '../core/types.ts'
-import { DIFFICULTY_LABELS, PLAYER_LABELS } from '../labels.ts'
+import { DIFFICULTY_LABELS, playerLabels } from '../labels.ts'
 import { Board } from './Board.tsx'
 import { Card } from './Card.tsx'
 import { CardDetail } from './CardDetail.tsx'
@@ -364,6 +364,10 @@ export default function App() {
 
   const handFx = (p: PlayerId) => handFxOf(boardFx, p)
 
+  // 呼称は対戦相手で変わる（人間戦は Player1/Player2、CPU 戦は Player/CPU）。
+  // 切り替えた瞬間に盤面もログも追従する
+  const labels = playerLabels(opponent !== 'human')
+
   return (
     <div className={`app ${drag !== null || targetDrag.drag !== null ? 'app--dragging' : ''}`}>
       <header className="topbar">
@@ -372,7 +376,7 @@ export default function App() {
           ターン {state.turn} / {TOTAL_TURNS}
         </span>
         <span className="topbar__current">
-          {playing ? `${PLAYER_LABELS[state.current]} の手番` : '決着'}
+          {playing ? `${labels[state.current]} の手番` : '決着'}
           {cpuTurn && <span className="topbar__thinking">思考中…</span>}
         </span>
         <label className="topbar__opponent">
@@ -418,17 +422,19 @@ export default function App() {
         <TargetPicker
           state={state}
           selection={selection}
+          labels={labels}
           moves={moves}
           onBack={() => setSelection(backSelection(selection))}
           onReset={() => setSelection(START)}
         />
       ) : (
-        <Result state={state} onRestart={() => restart(randomSeed())} />
+        <Result state={state} labels={labels} onRestart={() => restart(randomSeed())} />
       )}
 
       <Hand
         state={state}
         player={1}
+        labels={labels}
         fx={handFx(1)}
         selectableUids={handSelectable(1)}
         selectedUid={state.current === 1 ? selectedUid : null}
@@ -440,6 +446,7 @@ export default function App() {
 
       <Board
         state={state}
+        labels={labels}
         placeableZones={selectableZones(moves, selection)}
         movableZones={movableZones}
         targetUids={selectableTargets(moves, selection)}
@@ -457,6 +464,7 @@ export default function App() {
       <Hand
         state={state}
         player={0}
+        labels={labels}
         fx={handFx(0)}
         selectableUids={handSelectable(0)}
         selectedUid={state.current === 0 ? selectedUid : null}
@@ -466,7 +474,7 @@ export default function App() {
         onHover={handleHover}
       />
 
-      <Log state={state} />
+      <Log state={state} labels={labels} />
 
       <footer className="seedline">
         シード {seed}
@@ -489,6 +497,7 @@ export default function App() {
       <EffectLayer
         event={playback.event}
         showCutIn={playback.phase === 'cutin'}
+        labels={labels}
         ghostLayerRef={ghostLayerRef}
         onSkip={skipFx}
       />
